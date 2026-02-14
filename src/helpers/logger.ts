@@ -27,7 +27,25 @@ function timestamp(): string {
 
 export const logger = {
   configure(opts: LoggerConfig): void {
-    config = { ...opts };
+    // Verbose and quiet are mutually exclusive — verbose wins with a warning
+    if (opts.verbose && opts.quiet) {
+      config = { ...opts, quiet: false };
+      const prefix = colorize("WARN", YELLOW);
+      console.error(
+        prefix,
+        "Both --verbose and --quiet specified. Using verbose mode.",
+      );
+    } else {
+      config = { ...opts };
+    }
+  },
+
+  get isVerbose(): boolean {
+    return config.verbose === true;
+  },
+
+  get isQuiet(): boolean {
+    return config.quiet === true;
   },
 
   /** Only outputs when verbose mode is enabled. Always goes to stderr. */
