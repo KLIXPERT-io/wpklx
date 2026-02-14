@@ -9,6 +9,7 @@ import { handleError } from "./helpers/error.ts";
 import { setNoColor } from "./cli/output.ts";
 import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./cli/commands.ts";
 import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
+import { runLogin } from "./cli/login.ts";
 
 const version: string = pkg.version;
 
@@ -22,6 +23,12 @@ async function main(): Promise<void> {
     rawArgs[0] === "version"
   ) {
     console.log(`wpklx v${version}`);
+    process.exit(0);
+  }
+
+  // Handle login early (before config resolution — no config needed)
+  if (rawArgs[0] === "login") {
+    await runLogin();
     process.exit(0);
   }
 

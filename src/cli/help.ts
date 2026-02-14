@@ -15,6 +15,7 @@ export function showGlobalHelp(version: string): void {
 
 ## Built-in Commands
 
+- \`wpklx login\` — Interactive WordPress site setup
 - \`wpklx version\` — Show CLI version
 - \`wpklx discover\` — Discover API routes from WordPress site
 - \`wpklx routes\` — List available API routes
