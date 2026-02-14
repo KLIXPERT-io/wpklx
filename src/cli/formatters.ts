@@ -1,3 +1,4 @@
+import { stringify } from "yaml";
 import { renderTable } from "./output.ts";
 
 /**
@@ -50,4 +51,88 @@ function flattenValue(value: unknown): string {
 
   // Objects: JSON summary
   return JSON.stringify(value);
+}
+
+/** Filters an object/array to only include specified fields. */
+function filterFields(
+  data: unknown,
+  fields?: string,
+): unknown {
+  if (!fields) return data;
+
+  const keys = fields.split(",").map((f) => f.trim());
+
+  if (Array.isArray(data)) {
+    return data.map((item) => pickKeys(item as Record<string, unknown>, keys));
+  }
+
+  if (typeof data === "object" && data !== null) {
+    return pickKeys(data as Record<string, unknown>, keys);
+  }
+
+  return data;
+}
+
+function pickKeys(
+  obj: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (key in obj) {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
+/** Formats data as pretty-printed JSON. */
+export function formatJson(data: unknown, fields?: string): string {
+  return JSON.stringify(filterFields(data, fields), null, 2);
+}
+
+/** Formats data as YAML. */
+export function formatYaml(data: unknown, fields?: string): string {
+  return stringify(filterFields(data, fields));
+}
+
+/** Formats data in quiet mode — just IDs, one per line. */
+export function formatQuiet(data: unknown): string {
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => {
+        if (typeof item === "object" && item !== null && "id" in item) {
+          return String((item as { id: unknown }).id);
+        }
+        return String(item);
+      })
+      .join("\n");
+  }
+
+  if (typeof data === "object" && data !== null && "id" in data) {
+    return String((data as { id: unknown }).id);
+  }
+
+  return "";
+}
+
+/** Routes data to the appropriate formatter based on format string. */
+export function formatOutput(
+  data: unknown,
+  format: string,
+  opts: { fields?: string; quiet?: boolean } = {},
+): string {
+  if (opts.quiet) return formatQuiet(data);
+
+  switch (format) {
+    case "json":
+      return formatJson(data, opts.fields);
+    case "yaml":
+      return formatYaml(data, opts.fields);
+    case "table":
+    default: {
+      const items = Array.isArray(data) ? data : [data];
+      return formatTable(items as Record<string, unknown>[], opts.fields);
+    }
+  }
 }
