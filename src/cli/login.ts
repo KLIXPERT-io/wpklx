@@ -1,4 +1,6 @@
 import * as readline from "node:readline";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 const ANSI = {
   reset: "\x1b[0m",
@@ -87,6 +89,14 @@ export interface LoginCredentials {
   profileName: string;
 }
 
+export type ConfigScope = "global" | "local";
+
+export interface ConfigScopeResult {
+  scope: ConfigScope;
+  configPath: string;
+  setAsDefault: boolean;
+}
+
 export interface ValidationResult {
   success: boolean;
   displayName?: string;
@@ -152,6 +162,32 @@ export async function validateCredentials(
   }
 }
 
+/** Prompt the user to choose config scope and default profile setting. */
+export function chooseConfigScope(
+  profileName: string,
+): ConfigScopeResult {
+  const globalPath = join(homedir(), ".config", "wpklx", "config.yaml");
+  const localPath = join(process.cwd(), "wpklx.config.yaml");
+
+  // Ask: global or local?
+  console.log("\nWhere should this profile be saved?");
+  console.log(`  1) ${style("Global", ANSI.bold)} — ~/.config/wpklx/config.yaml (all projects)`);
+  console.log(`  2) ${style("Local", ANSI.bold)}  — ./wpklx.config.yaml (this project only)`);
+  const scopeAnswer = promptInput("Choose", "1");
+  const scope: ConfigScope = scopeAnswer === "2" ? "local" : "global";
+  const configPath = scope === "global" ? globalPath : localPath;
+
+  // Ask: set as default?
+  // Default to yes if profile is named "default" or if it's the only/first profile
+  const isDefaultName = profileName === "default";
+  const setAsDefault = promptConfirm(
+    "Set this profile as the default?",
+    isDefaultName,
+  );
+
+  return { scope, configPath, setAsDefault };
+}
+
 /**
  * Interactive login command — guides users through WordPress site setup.
  * Collects credentials, validates them, and saves the config.
@@ -163,6 +199,7 @@ export async function runLogin(): Promise<void> {
   );
 
   let credentials = await collectCredentials();
+  let displayName = "";
 
   // Validate credentials with retry loop
   while (true) {
@@ -175,11 +212,10 @@ export async function runLogin(): Promise<void> {
     );
 
     if (result.success) {
+      displayName = result.displayName!;
       console.log(
-        style(`  Authenticated as ${result.displayName}`, ANSI.green),
+        style(`  Authenticated as ${displayName}`, ANSI.green),
       );
-
-      // TODO: US-004+ — config scope selection and saving
       break;
     }
 
@@ -187,7 +223,6 @@ export async function runLogin(): Promise<void> {
     console.log(`\n${style(result.errorMessage!, ANSI.red)}`);
 
     if (result.errorType === "auth") {
-      // Auth failure — offer to re-enter username and password
       const retry = promptConfirm("Re-enter username and password?");
       if (!retry) process.exit(1);
 
@@ -198,7 +233,6 @@ export async function runLogin(): Promise<void> {
       if (!rawPassword) process.exit(1);
       credentials.applicationPassword = rawPassword.replace(/\s/g, "");
     } else if (result.errorType === "network" || result.errorType === "ssl") {
-      // Network/SSL failure — offer to re-enter host
       const retry = promptConfirm("Re-enter host URL?");
       if (!retry) process.exit(1);
 
@@ -209,6 +243,20 @@ export async function runLogin(): Promise<void> {
       process.exit(1);
     }
   }
+
+  // Choose config scope and default setting
+  const { configPath, setAsDefault } = chooseConfigScope(
+    credentials.profileName,
+  );
+
+  // TODO: US-005 — write YAML config file
+  // TODO: US-006 — show success output
+  console.log(
+    `\n${style("Config path:", ANSI.dim)} ${configPath}`,
+  );
+  console.log(
+    `${style("Set as default:", ANSI.dim)} ${setAsDefault ? "yes" : "no"}`,
+  );
 }
 
 /** Collect all credentials via interactive prompts. */
