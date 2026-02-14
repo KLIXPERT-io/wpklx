@@ -21,6 +21,7 @@ import { renderTable } from "./output.ts";
 import { suggestSimilar } from "./help.ts";
 import { logger } from "../helpers/logger.ts";
 import { CliError, ExitCode } from "../helpers/error.ts";
+import { serializeToBlocks } from "../helpers/wp-serialize.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -90,6 +91,31 @@ async function discoverAndCache(config: ResolvedConfig) {
   const schema = await discoverSchema(config);
   saveSchemaCache(config.host, schema);
   return schema;
+}
+
+/**
+ * Apply --serialize flag: convert content HTML to WordPress block HTML.
+ * Throws if --serialize is set but no content is available.
+ */
+async function applySerializeFlag(
+  options: Record<string, string | boolean>,
+  parsed: ParsedArgs,
+): Promise<void> {
+  if (!parsed.globalFlags.serialize) return;
+
+  // Silently ignore on read-only actions
+  const action = parsed.action;
+  if (action !== "create" && action !== "update") return;
+
+  const content = options["content"];
+  if (content === undefined || content === true || content === "") {
+    throw new CliError(
+      "--serialize requires --content to be provided with a value",
+      ExitCode.VALIDATION,
+    );
+  }
+
+  options["content"] = await serializeToBlocks(content as string);
 }
 
 /** Execute a dynamic resource command (CRUD). */
@@ -207,6 +233,7 @@ export async function executeCommand(
     }
 
     case "create": {
+      await applySerializeFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
         body[key] = value;
@@ -231,6 +258,7 @@ export async function executeCommand(
           ExitCode.VALIDATION,
         );
       }
+      await applySerializeFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
         body[key] = value;

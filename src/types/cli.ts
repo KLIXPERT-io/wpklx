@@ -10,6 +10,7 @@ export interface GlobalFlags {
   help?: boolean;
   version?: boolean;
   env?: string;
+  serialize?: boolean;
 }
 
 /** Parsed CLI arguments after argument processing */

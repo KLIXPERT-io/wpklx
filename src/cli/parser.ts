@@ -32,6 +32,7 @@ const GLOBAL_FLAG_NAMES = new Set([
   "--help",
   "--version",
   "--env",
+  "--serialize",
 ]);
 
 /**
@@ -75,14 +76,26 @@ export function extractProfile(args: string[]): ProfileResult {
  * Expects args with @profile already extracted (use extractProfile first).
  */
 export function parseArgs(args: string[]): ParsedArgs {
+  // Normalize --key=value into --key value
+  const normalizedArgs: string[] = [];
+  for (const arg of args) {
+    if (arg.startsWith("--") && arg.includes("=")) {
+      const eqIndex = arg.indexOf("=");
+      normalizedArgs.push(arg.slice(0, eqIndex));
+      normalizedArgs.push(arg.slice(eqIndex + 1));
+    } else {
+      normalizedArgs.push(arg);
+    }
+  }
+
   const globalFlags: GlobalFlags = {};
   const positional: string[] = [];
   const options: Record<string, string | boolean> = {};
   let stdinFlag: string | undefined;
 
   let i = 0;
-  while (i < args.length) {
-    const arg = args[i]!;
+  while (i < normalizedArgs.length) {
+    const arg = normalizedArgs[i]!;
 
     if (GLOBAL_FLAG_NAMES.has(arg)) {
       const flagName = arg.slice(2).replace(/-/g, "_");
@@ -93,7 +106,8 @@ export function parseArgs(args: string[]): ParsedArgs {
         arg === "--verbose" ||
         arg === "--no-color" ||
         arg === "--help" ||
-        arg === "--version"
+        arg === "--version" ||
+        arg === "--serialize"
       ) {
         (globalFlags as Record<string, boolean>)[flagName] = true;
         i++;
@@ -101,7 +115,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       }
 
       // Value global flags
-      const nextArg = args[i + 1];
+      const nextArg = normalizedArgs[i + 1];
       if (nextArg !== undefined && !nextArg.startsWith("--")) {
         if (arg === "--per-page" || arg === "--page") {
           (globalFlags as Record<string, number>)[flagName] = parseInt(
@@ -120,7 +134,7 @@ export function parseArgs(args: string[]): ParsedArgs {
 
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
-      const nextArg = args[i + 1];
+      const nextArg = normalizedArgs[i + 1];
       // Detect --flag - (stdin sentinel)
       if (nextArg === "-") {
         if (stdinFlag) {
