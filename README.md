@@ -211,8 +211,8 @@ wpklx post get --id 42
 wpklx post show 42                     # shortcut, positional ID
 wpklx post create --title "Hello World" --status draft
 wpklx post new --title "Hello World"   # shortcut
-wpklx post update --id 42 --title "Updated Title"
-wpklx post edit 42 --title "Updated"   # shortcut, positional ID
+wpklx post update 42 --title "Updated Title"
+wpklx post edit 42 --title="Updated"   # shortcut, positional ID, = syntax
 wpklx post delete --id 42
 wpklx post rm 42                       # shortcut
 wpklx post delete --id 42 --force      # skip trash, permanent delete
@@ -302,6 +302,8 @@ Stdin is only accepted for write actions (`create`, `update`). Using `--flag -` 
 --help, -h          Show help
 --version, -v       Show version
 ```
+
+Flags accept both `--flag value` and `--flag=value` syntax.
 
 By default, table output shows only essential columns (ID plus key fields like title, slug, status, date). Use `--fields=all` to show every column, or `--fields=id,title,status` to pick specific ones.
 
