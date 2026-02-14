@@ -22,6 +22,7 @@ import { suggestSimilar } from "./help.ts";
 import { logger } from "../helpers/logger.ts";
 import { CliError, ExitCode } from "../helpers/error.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
+import { markdownToHtml } from "../vendor/mmd.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -116,6 +117,40 @@ async function applySerializeFlag(
   }
 
   options["content"] = await serializeToBlocks(content as string);
+}
+
+/**
+ * Apply --markdown flag: convert content Markdown to HTML, then to WordPress block HTML.
+ * Mutually exclusive with --serialize. Throws if no content is available.
+ */
+async function applyMarkdownFlag(
+  options: Record<string, string | boolean>,
+  parsed: ParsedArgs,
+): Promise<void> {
+  if (!parsed.globalFlags.markdown) return;
+
+  // Mutual exclusivity check
+  if (parsed.globalFlags.serialize) {
+    throw new CliError(
+      "--serialize and --markdown are mutually exclusive. Use one or the other.",
+      ExitCode.VALIDATION,
+    );
+  }
+
+  // Silently ignore on read-only actions
+  const action = parsed.action;
+  if (action !== "create" && action !== "update") return;
+
+  const content = options["content"];
+  if (content === undefined || content === true || content === "") {
+    throw new CliError(
+      "--markdown requires --content to be provided with a value",
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const html = markdownToHtml(content as string);
+  options["content"] = await serializeToBlocks(html);
 }
 
 /** Execute a dynamic resource command (CRUD). */
@@ -234,6 +269,7 @@ export async function executeCommand(
 
     case "create": {
       await applySerializeFlag(options, parsed);
+      await applyMarkdownFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
         body[key] = value;
@@ -259,6 +295,7 @@ export async function executeCommand(
         );
       }
       await applySerializeFlag(options, parsed);
+      await applyMarkdownFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
         body[key] = value;
