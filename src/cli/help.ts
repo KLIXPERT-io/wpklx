@@ -19,6 +19,8 @@ export function showGlobalHelp(version: string): void {
 - \`wpklx version\` — Show CLI version
 - \`wpklx discover\` — Discover API routes from WordPress site
 - \`wpklx routes\` — List available API routes
+- \`wpklx serialize\` — Convert HTML to WordPress block HTML
+- \`wpklx markdown\` — Convert Markdown to WordPress block HTML
 - \`wpklx config ls\` — List profiles
 - \`wpklx config show\` — Show profile settings
 - \`wpklx config path\` — Show config file path
@@ -31,7 +33,7 @@ export function showGlobalHelp(version: string): void {
 ## Global Flags
 
 - \`--format <table|json|yaml>\` — Output format (default: table)
-- \`--fields <field1,field2>\` — Limit output fields
+- \`--fields <field1,field2|all>\` — Limit output fields, or \`all\` for every column
 - \`--per-page <n>\` — Results per page (default: 20)
 - \`--page <n>\` — Page number
 - \`--quiet\` — Minimal output (IDs only)
@@ -39,17 +41,36 @@ export function showGlobalHelp(version: string): void {
 - \`--no-color\` — Disable ANSI colors
 - \`--env <path>\` — Custom .env file path
 
+## Serialize & Markdown Flags
+
+- \`--file <path>\` — Read input from file (or \`-\` for stdin)
+- \`--output <path>\` — Write output to file
+- \`--no-h1\` — Strip the first H1 element
+
+## Stdin & Pipes
+
+- \`--flag -\` — Read stdin into a specific flag
+- Bare pipe auto-maps to \`--content\` for posts/pages or \`--file\` for media
+
 ## Action Shortcuts
 
 \`ls\` → list, \`show\` → get, \`new\` → create, \`edit\` → update, \`rm\` → delete
+
+## Namespace Prefix
+
+\`wpklx <namespace>:<resource> <action>\` — Access plugin routes (e.g. \`wpml:post list\`)
 
 ## Examples
 
 \`\`\`
 wpklx post list --status draft
-wpklx post show 42
+wpklx post show 42 --fields=all
 wpklx @staging post create --title "Hello" --status publish
 wpklx media upload --file ./photo.jpg
+cat photo.jpg | wpklx media upload --file -
+echo "# Hello" | wpklx markdown
+wpklx serialize --file page.html --output page.blocks.html
+wpklx wpml:post list --format json
 \`\`\`
 `;
 
