@@ -1,6 +1,14 @@
 import * as readline from "node:readline";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  chmodSync,
+} from "node:fs";
+import { stringify, parse } from "yaml";
 
 const ANSI = {
   reset: "\x1b[0m",
@@ -188,6 +196,53 @@ export function chooseConfigScope(
   return { scope, configPath, setAsDefault };
 }
 
+/** Save credentials to a YAML config file, merging with existing profiles. */
+export function saveConfig(
+  configPath: string,
+  profileName: string,
+  credentials: LoginCredentials,
+  setAsDefault: boolean,
+): void {
+  // Load existing config or create new
+  let configData: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    const content = readFileSync(configPath, "utf-8");
+    configData = (parse(content) as Record<string, unknown>) ?? {};
+  }
+
+  // Ensure profiles section exists
+  if (!configData["profiles"] || typeof configData["profiles"] !== "object") {
+    configData["profiles"] = {};
+  }
+
+  const profiles = configData["profiles"] as Record<string, unknown>;
+
+  // Add the new profile
+  profiles[profileName] = {
+    host: credentials.host,
+    username: credentials.username,
+    application_password: credentials.applicationPassword,
+  };
+
+  // Set as default if requested
+  if (setAsDefault) {
+    configData["default"] = profileName;
+  }
+
+  // Create parent directories if needed
+  const dir = dirname(configPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  // Write YAML with 2-space indentation
+  const yamlContent = stringify(configData, { indent: 2 });
+  writeFileSync(configPath, yamlContent, { mode: 0o600 });
+
+  // Ensure permissions are set (in case file already existed)
+  chmodSync(configPath, 0o600);
+}
+
 /**
  * Interactive login command — guides users through WordPress site setup.
  * Collects credentials, validates them, and saves the config.
@@ -249,13 +304,12 @@ export async function runLogin(): Promise<void> {
     credentials.profileName,
   );
 
-  // TODO: US-005 — write YAML config file
+  // Save config
+  saveConfig(configPath, credentials.profileName, credentials, setAsDefault);
+
   // TODO: US-006 — show success output
   console.log(
-    `\n${style("Config path:", ANSI.dim)} ${configPath}`,
-  );
-  console.log(
-    `${style("Set as default:", ANSI.dim)} ${setAsDefault ? "yes" : "no"}`,
+    `\n${style("Config saved to:", ANSI.dim)} ${configPath}`,
   );
 }
 
