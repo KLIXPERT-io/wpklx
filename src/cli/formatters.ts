@@ -16,7 +16,7 @@ export function formatTable(
   if (fields) {
     columns = fields.split(",").map((f) => f.trim());
   } else {
-    columns = Object.keys(data[0]!);
+    columns = selectDefaultColumns(data[0]!);
   }
 
   // Build rows
@@ -28,6 +28,50 @@ export function formatTable(
   );
 
   return renderTable(columns, rows);
+}
+
+const MAX_DEFAULT_COLUMNS = 6;
+const PREFERRED_FIELDS = ["title", "name", "slug", "status", "date", "date_gmt"];
+
+/**
+ * Selects a compact set of default columns from the first data row.
+ * Excludes object/array fields and prioritizes common WordPress fields.
+ */
+function selectDefaultColumns(sample: Record<string, unknown>): string[] {
+  const columns: string[] = [];
+  const allKeys = Object.keys(sample);
+
+  // Always include `id` first if present
+  if ("id" in sample) {
+    columns.push("id");
+  }
+
+  // Add preferred fields that exist and have simple values
+  for (const field of PREFERRED_FIELDS) {
+    if (columns.length >= MAX_DEFAULT_COLUMNS) break;
+    if (field in sample && !columns.includes(field) && isSimpleValue(sample[field])) {
+      columns.push(field);
+    }
+  }
+
+  // Fill remaining slots from other simple-value fields
+  for (const key of allKeys) {
+    if (columns.length >= MAX_DEFAULT_COLUMNS) break;
+    if (!columns.includes(key) && isSimpleValue(sample[key])) {
+      columns.push(key);
+    }
+  }
+
+  // Fallback: if nothing matched, show all keys (shouldn't happen in practice)
+  return columns.length > 0 ? columns : allKeys;
+}
+
+/** Returns true if a value is a simple scalar (not an object or array). */
+function isSimpleValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return false;
+  if (typeof value === "object") return false;
+  return true;
 }
 
 /** Flattens a value for table display. */
