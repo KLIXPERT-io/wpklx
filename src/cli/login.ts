@@ -7,6 +7,7 @@ const ANSI = {
   green: "\x1b[32m",
   cyan: "\x1b[36m",
   yellow: "\x1b[33m",
+  red: "\x1b[31m",
 };
 
 function style(text: string, code: string): string {
@@ -21,6 +22,14 @@ function promptInput(question: string, defaultValue?: string): string {
   return value;
 }
 
+/** Prompt yes/no. Returns true for yes. */
+function promptConfirm(question: string, defaultYes = true): boolean {
+  const hint = defaultYes ? "[Y/n]" : "[y/N]";
+  const answer = prompt(`${question} ${hint}:`);
+  if (!answer || !answer.trim()) return defaultYes;
+  return /^y(es)?$/i.test(answer.trim());
+}
+
 /** Prompt for a password with masked input (characters hidden). */
 function promptPassword(question: string): Promise<string> {
   return new Promise((resolve) => {
@@ -29,7 +38,6 @@ function promptPassword(question: string): Promise<string> {
       output: process.stdout,
     });
 
-    // Mute stdout to hide typed characters
     const originalWrite = process.stdout.write.bind(process.stdout);
     let muted = false;
 
@@ -50,7 +58,7 @@ function promptPassword(question: string): Promise<string> {
     rl.question(`${question}: `, (answer) => {
       muted = false;
       process.stdout.write = originalWrite;
-      console.log(); // newline after hidden input
+      console.log();
       rl.close();
       resolve(answer.trim());
     });
@@ -64,14 +72,11 @@ export function normalizeHost(input: string): string {
   let url = input.trim();
   if (!url) return url;
 
-  // Add https:// if no scheme present
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }
 
-  // Strip trailing slashes
   url = url.replace(/\/+$/, "");
-
   return url;
 }
 
@@ -82,9 +87,74 @@ export interface LoginCredentials {
   profileName: string;
 }
 
+export interface ValidationResult {
+  success: boolean;
+  displayName?: string;
+  errorType?: "auth" | "network" | "ssl";
+  errorMessage?: string;
+}
+
+/** Validate credentials by calling GET /wp-json/wp/v2/users/me */
+export async function validateCredentials(
+  host: string,
+  username: string,
+  applicationPassword: string,
+): Promise<ValidationResult> {
+  const url = `${host}/wp-json/wp/v2/users/me`;
+  const authHeader = `Basic ${btoa(`${username}:${applicationPassword}`)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: authHeader },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { name?: string };
+      return { success: true, displayName: data.name ?? username };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        errorType: "auth",
+        errorMessage: "Authentication failed. Check your username and application password.",
+      };
+    }
+
+    return {
+      success: false,
+      errorType: "network",
+      errorMessage: `Unexpected response (${response.status}) from ${url}`,
+    };
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+
+    if (
+      err.message.includes("UNABLE_TO_VERIFY_LEAF_SIGNATURE") ||
+      err.message.includes("CERT_") ||
+      err.message.includes("certificate") ||
+      err.message.includes("SSL")
+    ) {
+      return {
+        success: false,
+        errorType: "ssl",
+        errorMessage: `SSL certificate verification failed for ${host}.\nConsider adding verify_ssl: false to your config or checking the certificate.`,
+      };
+    }
+
+    return {
+      success: false,
+      errorType: "network",
+      errorMessage: `Could not connect to ${host}. Check the URL and your network connection.`,
+    };
+  }
+}
+
 /**
  * Interactive login command — guides users through WordPress site setup.
- * Collects host, username, application password, and profile name.
+ * Collects credentials, validates them, and saves the config.
  */
 export async function runLogin(): Promise<void> {
   console.log(
@@ -92,20 +162,59 @@ export async function runLogin(): Promise<void> {
       " — Interactive WordPress site setup\n",
   );
 
-  const credentials = await collectCredentials();
+  let credentials = await collectCredentials();
 
-  // Placeholder for US-003+ (validation, saving, etc.)
-  console.log(
-    `\n${style("Collected:", ANSI.dim)} host=${credentials.host}, user=${credentials.username}, profile=${credentials.profileName}`,
-  );
+  // Validate credentials with retry loop
+  while (true) {
+    console.log(`\n${style("Validating credentials...", ANSI.dim)}`);
+
+    const result = await validateCredentials(
+      credentials.host,
+      credentials.username,
+      credentials.applicationPassword,
+    );
+
+    if (result.success) {
+      console.log(
+        style(`  Authenticated as ${result.displayName}`, ANSI.green),
+      );
+
+      // TODO: US-004+ — config scope selection and saving
+      break;
+    }
+
+    // Show error
+    console.log(`\n${style(result.errorMessage!, ANSI.red)}`);
+
+    if (result.errorType === "auth") {
+      // Auth failure — offer to re-enter username and password
+      const retry = promptConfirm("Re-enter username and password?");
+      if (!retry) process.exit(1);
+
+      credentials.username = promptInput("WordPress username");
+      if (!credentials.username) process.exit(1);
+
+      const rawPassword = await promptPassword("Application password");
+      if (!rawPassword) process.exit(1);
+      credentials.applicationPassword = rawPassword.replace(/\s/g, "");
+    } else if (result.errorType === "network" || result.errorType === "ssl") {
+      // Network/SSL failure — offer to re-enter host
+      const retry = promptConfirm("Re-enter host URL?");
+      if (!retry) process.exit(1);
+
+      const rawHost = promptInput("WordPress site URL (e.g., example.com)");
+      if (!rawHost) process.exit(1);
+      credentials.host = normalizeHost(rawHost);
+    } else {
+      process.exit(1);
+    }
+  }
 }
 
 /** Collect all credentials via interactive prompts. */
 export async function collectCredentials(): Promise<LoginCredentials> {
   // 1. WordPress site URL
-  const rawHost = promptInput(
-    "WordPress site URL (e.g., example.com)",
-  );
+  const rawHost = promptInput("WordPress site URL (e.g., example.com)");
   if (!rawHost) {
     console.error("Host URL is required.");
     process.exit(1);
@@ -133,7 +242,6 @@ export async function collectCredentials(): Promise<LoginCredentials> {
     console.error("Application password is required.");
     process.exit(1);
   }
-  // WordPress displays app passwords with spaces — strip them
   const applicationPassword = rawPassword.replace(/\s/g, "");
 
   // 5. Profile name
