@@ -7,6 +7,16 @@ export interface StdinResult {
   text: string;
 }
 
+/** Default stdin parameter mapping by resource name */
+const STDIN_DEFAULT_MAP: Record<string, string> = {
+  post: "content",
+  page: "content",
+  comment: "content",
+  category: "description",
+  tag: "description",
+  media: "file",
+};
+
 /** Reads all of stdin into a Buffer. */
 export async function readStdin(): Promise<StdinResult> {
   const stream = Bun.stdin.stream();
@@ -16,28 +26,44 @@ export async function readStdin(): Promise<StdinResult> {
 }
 
 /**
- * If a --flag - was specified, reads stdin and injects the content
- * into parsed.options[stdinFlag].
+ * Resolves stdin input for the command:
+ * 1. If --flag - was specified, reads stdin into that flag
+ * 2. If stdin is piped (not TTY) and no --flag -, auto-maps based on resource
  */
 export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
-  if (!parsed.stdinFlag) return;
+  if (parsed.stdinFlag) {
+    // Explicit --flag - was used
+    if (process.stdin.isTTY) {
+      throw new CliError(
+        `--${parsed.stdinFlag} - expects piped input but stdin is a terminal`,
+        ExitCode.VALIDATION,
+      );
+    }
 
-  // --flag - was used but stdin is a TTY (not piped)
-  if (process.stdin.isTTY) {
-    throw new CliError(
-      `--${parsed.stdinFlag} - expects piped input but stdin is a terminal`,
-      ExitCode.VALIDATION,
-    );
+    const { text } = await readStdin();
+
+    if (text.length === 0) {
+      throw new CliError(
+        "Stdin is empty — no data to read",
+        ExitCode.VALIDATION,
+      );
+    }
+
+    parsed.options[parsed.stdinFlag] = text;
+    return;
   }
+
+  // Bare pipe: stdin is piped but no --flag - was specified
+  if (process.stdin.isTTY) return;
+
+  const defaultParam = STDIN_DEFAULT_MAP[parsed.resource] ?? "content";
+
+  // If the default parameter was already provided via CLI args, ignore stdin
+  if (parsed.options[defaultParam] !== undefined) return;
 
   const { text } = await readStdin();
 
-  if (text.length === 0) {
-    throw new CliError(
-      "Stdin is empty — no data to read",
-      ExitCode.VALIDATION,
-    );
-  }
+  if (text.length === 0) return; // Silently ignore empty bare pipe
 
-  parsed.options[parsed.stdinFlag] = text;
+  parsed.options[defaultParam] = text;
 }
