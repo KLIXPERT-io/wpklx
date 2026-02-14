@@ -30,6 +30,12 @@ export function showGlobalHelp(version: string): void {
 - \`wpklx help\` — Show this help
 - \`wpklx <resource> help\` — Show help for a resource
 
+## Positional ID
+
+\`wpklx <resource> <action> <id>\` — Pass the ID directly without \`--id\`:
+
+\`wpklx post show 42\`, \`wpklx post edit 42 --title "New"\`, \`wpklx post rm 42\`
+
 ## Global Flags
 
 - \`--format <table|json|yaml>\` — Output format (default: table)
@@ -41,7 +47,18 @@ export function showGlobalHelp(version: string): void {
 - \`--no-color\` — Disable ANSI colors
 - \`--env <path>\` — Custom .env file path
 
-## Serialize & Markdown Flags
+Flags accept both \`--flag value\` and \`--flag=value\` syntax.
+
+## Content Transformation (create/update)
+
+- \`--serialize\` — Convert HTML content to WordPress block HTML before sending
+- \`--markdown\` — Convert Markdown content to block HTML before sending
+- \`--no-h1\` — Strip the first H1 element (use with \`--serialize\` or \`--markdown\`)
+
+Example: \`wpklx post create --title "Hello" --content "<p>Hi</p>" --serialize\`
+Example: \`wpklx post edit 42 --content "# Updated" --markdown --no-h1\`
+
+## Serialize & Markdown Commands
 
 - \`--file <path>\` — Read input from file (or \`-\` for stdin)
 - \`--output <path>\` — Write output to file
@@ -51,6 +68,20 @@ export function showGlobalHelp(version: string): void {
 
 - \`--flag -\` — Read stdin into a specific flag
 - Bare pipe auto-maps to \`--content\` for posts/pages or \`--file\` for media
+
+## Media Upload
+
+\`wpklx media upload --file <path>\` — Upload a file to the WordPress media library.
+
+- \`--file <path>\` — Path to the file to upload *(required)*
+- \`--title <text>\` — Set the media title
+- \`--alt-text <text>\` — Set the alt text for images
+- \`--mime-type <type>\` — Override the MIME type (auto-detected from extension)
+
+Supports stdin: \`cat photo.jpg | wpklx media upload --file -\`
+When piping binary data, use \`--title\` or \`--filename\` to set the name.
+
+Supported formats: jpg, png, gif, webp, svg, pdf, mp4, mp3, wav.
 
 ## Action Shortcuts
 
@@ -65,6 +96,7 @@ export function showGlobalHelp(version: string): void {
 \`\`\`
 wpklx post list --status draft
 wpklx post show 42 --fields=all
+wpklx post edit 42 --title="Updated" --status=publish
 wpklx @staging post create --title "Hello" --status publish
 wpklx media upload --file ./photo.jpg
 cat photo.jpg | wpklx media upload --file -
@@ -108,6 +140,15 @@ export function showResourceHelp(
           param.enum ? ` (${param.enum.join(", ")})` : "";
         lines.push(`- \`--${param.name}\`${type}${required}${desc}${enumVals}`);
       }
+      lines.push("");
+    }
+
+    // Show content transformation flags for create/update actions
+    if (action === "create" || action === "update") {
+      lines.push("**Content Transformation:**\n");
+      lines.push(`- \`--serialize\` — Convert HTML content to WordPress block HTML`);
+      lines.push(`- \`--markdown\` — Convert Markdown content to block HTML`);
+      lines.push(`- \`--no-h1\` — Strip the first H1 element (use with \`--serialize\` or \`--markdown\`)`);
       lines.push("");
     }
   }
