@@ -25,8 +25,8 @@ No code changes required.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/wpklx-wordpress-cli.git
-cd wpklx-wordpress-cli
+git clone https://github.com/your-org/wpklx.git
+cd wpklx
 
 # Install dependencies
 bun install
@@ -34,6 +34,16 @@ bun install
 # Link globally
 bun link
 ```
+
+## Quick Start
+
+The fastest way to get started is with the interactive login command:
+
+```bash
+wpklx login
+```
+
+This walks you through connecting to a WordPress site — enter your host URL, username, and application password, and KLX will save a profile for you.
 
 ## Configuration
 
@@ -156,6 +166,7 @@ wpklx [@profile] <resource> <action> [--option value] [flags]
 
 | Command            | Description                              |
 | ------------------ | ---------------------------------------- |
+| `wpklx login`       | Interactive WordPress site setup         |
 | `wpklx discover`     | Fetch and cache the API schema           |
 | `wpklx routes`       | List all discovered routes               |
 | `wpklx config ls`    | List all profiles                        |
@@ -174,6 +185,20 @@ Standard CRUD actions are mapped from HTTP methods:
 | `create`   | `new`    | POST        | Create an item       |
 | `update`   | `edit`   | PUT/PATCH   | Update an item       |
 | `delete`   | `rm`     | DELETE      | Delete an item       |
+
+### Namespace Prefix
+
+When multiple plugins register the same resource name, use a namespace prefix to target a specific one:
+
+```bash
+# Access "post" under the wpml namespace
+wpklx wpml:post list
+
+# Access "settings" under a custom plugin namespace
+wpklx myplugin:settings get
+```
+
+The prefix matches against the route's namespace (e.g., `wpml/v1`, `myplugin/v1`). Without a prefix, `wp/v2` core routes are prioritized.
 
 ### Examples
 
@@ -216,18 +241,59 @@ wpklx comment rm 15
 wpklx widget ls
 wpklx form ls
 
+# Namespace prefix for plugin routes
+wpklx wpml:post ls
+wpklx woocommerce:product ls
+
 # Multi-site with profiles
 wpklx @staging post ls
 wpklx @local post new --title "Test"
 wpklx @client-site page ls --status draft
 ```
 
+### Stdin Piping
+
+KLX accepts piped input for creating and updating content. There are two ways to pipe data:
+
+**Explicit flag with `-` sentinel** — specify which parameter receives stdin:
+
+```bash
+# Pipe content into a specific flag
+echo "Hello World" | wpklx post create --content - --title "My Post"
+cat draft.md | wpklx page update 12 --content -
+echo "A new description" | wpklx category create --description - --name "News"
+```
+
+**Bare pipe** — when no `--flag -` is specified, stdin is auto-mapped to a sensible default parameter based on the resource:
+
+| Resource   | Default parameter |
+| ---------- | ----------------- |
+| `post`     | `content`         |
+| `page`     | `content`         |
+| `comment`  | `content`         |
+| `category` | `description`     |
+| `tag`      | `description`     |
+| `media`    | `file`            |
+| *other*    | `content`         |
+
+```bash
+# These are equivalent:
+echo "Hello" | wpklx post create --title "My Post"
+echo "Hello" | wpklx post create --content - --title "My Post"
+
+# Pipe binary data for media upload
+cat photo.jpg | wpklx media upload --title "Hero Image" --mime-type image/jpeg
+curl -s https://example.com/image.png | wpklx media upload --file - --title "Downloaded"
+```
+
+Stdin is only accepted for write actions (`create`, `update`). Using `--flag -` with `list`, `get`, or `delete` produces an error. If the default parameter is already provided via CLI args, bare-pipe stdin is ignored.
+
 ### Global Flags
 
 ```
 --env <path>        Path to .env file
 --format <type>     Output format: table, json, yaml
---fields <list>     Comma-separated fields to display
+--fields <list>     Comma-separated fields to display (use --fields=all for every column)
 --per-page <n>      Items per page
 --page <n>          Page number
 --quiet             Only output IDs
@@ -237,20 +303,26 @@ wpklx @client-site page ls --status draft
 --version, -v       Show version
 ```
 
+By default, table output shows only essential columns (ID plus key fields like title, slug, status, date). Use `--fields=all` to show every column, or `--fields=id,title,status` to pick specific ones.
+
 ## Project Structure
 
 ```
-wpklx-wordpress-cli/
+wpklx/
 ├── src/
 │   ├── index.ts                 # Entry point, CLI bootstrap
 │   ├── cli/
-│   │   ├── parser.ts            # Argument parsing and command routing
+│   │   ├── parser.ts            # Argument parsing, @profile extraction, namespace prefix
+│   │   ├── commands.ts          # Command execution (discover, routes, config, resources)
+│   │   ├── formatters.ts        # Table column selection, field filtering
 │   │   ├── help.ts              # Help text generation
-│   │   └── output.ts            # Formatters (table, json, yaml)
+│   │   ├── login.ts             # Interactive site setup wizard
+│   │   └── output.ts            # Output rendering (table, json, yaml, markdown)
 │   ├── api/
 │   │   ├── client.ts            # HTTP client with auth and error handling
 │   │   ├── discovery.ts         # Route discovery from /wp-json
-│   │   └── schema.ts            # Schema parsing and route-to-command mapping
+│   │   ├── schema.ts            # Schema parsing and route-to-command mapping
+│   │   └── cache.ts             # Schema caching
 │   ├── config/
 │   │   ├── env.ts               # .env file loading and validation
 │   │   ├── profiles.ts          # YAML profile loading and @name resolution
@@ -259,13 +331,11 @@ wpklx-wordpress-cli/
 │   │   ├── logger.ts            # Logging with verbosity levels
 │   │   ├── error.ts             # Error formatting and exit codes
 │   │   ├── retry.ts             # Retry logic for transient failures
-│   │   └── validators.ts        # Input validation helpers
+│   │   └── stdin.ts             # Stdin reading and --flag - resolution
 │   └── types/
 │       ├── api.ts               # API response and route types
 │       ├── cli.ts               # CLI argument types
 │       └── config.ts            # Configuration types
-├── wpklx.config.example.yaml
-├── .env.example
 ├── bunfig.toml
 ├── package.json
 ├── tsconfig.json

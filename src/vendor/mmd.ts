@@ -12,24 +12,30 @@ function escape(t: string): string {
 }
 
 function inlineEscape(s: string): string {
-  return (
-    escape(s)
-      // images
-      .replace(/!\[([^\]]*)]\(([^(]+)\)/g, '<img alt="$1" src="$2">')
-      // links
-      .replace(
-        /\[([^\]]+)]\(([^(]+?)\)/g,
-        '<a href="$2">$1</a>',
-      )
-      // inline code
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      // strikethrough
-      .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>")
-      // bold
-      .replace(/(\*\*|__)(?=\S)([^\r]*?\S[*_]*)\1/g, "<strong>$2</strong>")
-      // italic
-      .replace(/(\*|_)(?=\S)([^\r]*?\S)\1/g, "<em>$2</em>")
-  );
+  // Extract inline code spans first so their contents are never formatted
+  const codeSpans: string[] = [];
+  const escaped = escape(s).replace(/`([^`]+)`/g, (_, code) => {
+    codeSpans.push(`<code>${code}</code>`);
+    return `\x00CODE${codeSpans.length - 1}\x00`;
+  });
+
+  const formatted = escaped
+    // images
+    .replace(/!\[([^\]]*)]\(([^(]+)\)/g, '<img alt="$1" src="$2">')
+    // links
+    .replace(
+      /\[([^\]]+)]\(([^(]+?)\)/g,
+      '<a href="$2">$1</a>',
+    )
+    // strikethrough
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>")
+    // bold
+    .replace(/(\*\*|__)(?=\S)([^\r]*?\S[*_]*)\1/g, "<strong>$2</strong>")
+    // italic
+    .replace(/(\*|_)(?=\S)([^\r]*?\S)\1/g, "<em>$2</em>");
+
+  // Restore code spans
+  return formatted.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeSpans[parseInt(i)]!);
 }
 
 /** Convert a GFM-style table block into an HTML <table>. */
@@ -136,12 +142,28 @@ export function markdownToHtml(src: string): string {
     ">": [/\n> /, "<blockquote>", "</blockquote>", "\n"],
   };
 
-  src
+  // Extract fenced code blocks before block splitting (they can contain blank lines)
+  const fencedBlocks: string[] = [];
+  const normalized = src
     .replace(/\r/g, "")
     .replace(/^\n+|\n+$/g, "")
     .replace(/\t/g, "    ")
+    .replace(/^(`{3,})(\w*)\n([\s\S]*?)^\1[ \t]*$/gm, (_, _fence, lang, code) => {
+      const langAttr = lang ? ` class="language-${escape(lang)}"` : "";
+      fencedBlocks.push(`<pre><code${langAttr}>${escape(code.replace(/\n$/, ""))}</code></pre>`);
+      return `\x00FENCED${fencedBlocks.length - 1}\x00`;
+    });
+
+  normalized
     .split(/\n\n+/)
     .forEach((b) => {
+      // Fenced code block placeholder
+      const fencedMatch = b.match(/^\x00FENCED(\d+)\x00$/);
+      if (fencedMatch) {
+        h += fencedBlocks[parseInt(fencedMatch[1]!)]!;
+        return;
+      }
+
       // Horizontal rules
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(b.trim())) {
         h += "<hr>";
