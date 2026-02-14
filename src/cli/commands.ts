@@ -89,6 +89,12 @@ export async function executeCommand(
   config: ResolvedConfig,
   parsed: ParsedArgs,
 ): Promise<void> {
+  // Special case: media upload
+  if (parsed.resource === "media" && parsed.action === "upload") {
+    await handleMediaUpload(config, parsed);
+    return;
+  }
+
   const commands = await getSchema(config);
   const resourceCommands = commands[parsed.resource];
 
@@ -248,6 +254,44 @@ export async function executeCommand(
         ExitCode.VALIDATION,
       );
   }
+}
+
+/** Handle media upload command. */
+async function handleMediaUpload(
+  config: ResolvedConfig,
+  parsed: ParsedArgs,
+): Promise<void> {
+  const filePath = parsed.options["file"];
+  if (!filePath || typeof filePath !== "string") {
+    throw new CliError(
+      "Media upload requires --file <path>. Usage: wpklx media upload --file ./photo.jpg",
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const fields: Record<string, string> = {};
+  if (parsed.options["title"] && typeof parsed.options["title"] === "string") {
+    fields["title"] = parsed.options["title"];
+  }
+  if (
+    parsed.options["alt-text"] &&
+    typeof parsed.options["alt-text"] === "string"
+  ) {
+    fields["alt_text"] = parsed.options["alt-text"];
+  }
+
+  const client = new WpClient(config);
+  const response = await client.upload("/wp/v2/media", filePath, fields);
+
+  const output = formatOutput(
+    response.data,
+    parsed.globalFlags.format ?? config.output_format,
+    {
+      fields: parsed.globalFlags.fields,
+      quiet: parsed.globalFlags.quiet,
+    },
+  );
+  console.log(output);
 }
 
 /** Run config subcommands. */

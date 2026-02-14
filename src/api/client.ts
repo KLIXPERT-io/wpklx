@@ -58,6 +58,76 @@ export class WpClient {
     return this.request<T>("DELETE", path, { params });
   }
 
+  async upload<T = unknown>(
+    path: string,
+    filePath: string,
+    fields?: Record<string, string>,
+  ): Promise<ApiResponse<T>> {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      throw new CliError(`File not found: ${filePath}`, 5);
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    if (fields) {
+      for (const [key, value] of Object.entries(fields)) {
+        formData.append(key, value);
+      }
+    }
+
+    const url = `${this.baseUrl}${path}`;
+
+    if (!this.verifySsl) {
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+    }
+
+    const start = performance.now();
+    logger.debug(`POST ${url} (multipart upload)`);
+
+    return withRetry(
+      async () => {
+        let response: Response;
+        try {
+          response = await fetch(url, {
+            method: "POST",
+            headers: { Authorization: this.authHeader },
+            body: formData,
+            signal: AbortSignal.timeout(this.timeout),
+          });
+        } catch (error) {
+          throw formatNetworkError(
+            error instanceof Error ? error : new Error(String(error)),
+            this.config.host,
+          );
+        }
+
+        const elapsed = Math.round(performance.now() - start);
+        logger.debug(`Response: ${response.status} (${elapsed}ms)`);
+
+        if (!response.ok) {
+          let body: ApiError;
+          try {
+            body = (await response.json()) as ApiError;
+          } catch {
+            body = { code: "unknown", message: response.statusText };
+          }
+          throw formatApiError(response.status, body);
+        }
+
+        const data = (await response.json()) as T;
+        return { status: response.status, data, headers: response.headers };
+      },
+      {
+        isRetryable: (error) => {
+          if (error instanceof CliError) return false;
+          return error instanceof TypeError;
+        },
+      },
+    );
+  }
+
   private async request<T>(
     method: HttpMethod,
     path: string,
