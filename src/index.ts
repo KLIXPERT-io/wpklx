@@ -12,6 +12,7 @@ import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./
 import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
 import { runLogin } from "./cli/login.ts";
 import { runSerialize } from "./cli/serialize.ts";
+import { runMarkdown } from "./cli/markdown.ts";
 
 const version: string = pkg.version;
 
@@ -37,6 +38,12 @@ async function main(): Promise<void> {
   // Handle serialize early (no config needed — local utility command)
   if (rawArgs[0] === "serialize") {
     await runSerialize(rawArgs.slice(1));
+    process.exit(0);
+  }
+
+  // Handle markdown early (no config needed — local utility command)
+  if (rawArgs[0] === "markdown") {
+    await runMarkdown(rawArgs.slice(1));
     process.exit(0);
   }
 
