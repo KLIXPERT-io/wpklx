@@ -21,6 +21,7 @@ export interface ParsedArgs {
   options: Record<string, string | boolean>;
   globalFlags: GlobalFlags;
   stdinFlag?: string;
+  stdinData?: Buffer;
 }
 
 /** Metadata for a single CLI command derived from API schema */

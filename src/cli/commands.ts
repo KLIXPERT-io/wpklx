@@ -283,18 +283,30 @@ export async function executeCommand(
   }
 }
 
+/** Infer MIME type from a filename extension */
+function inferMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    pdf: "application/pdf",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+  };
+  return ext ? mimeMap[ext] ?? "application/octet-stream" : "application/octet-stream";
+}
+
 /** Handle media upload command. */
 async function handleMediaUpload(
   config: ResolvedConfig,
   parsed: ParsedArgs,
 ): Promise<void> {
-  const filePath = parsed.options["file"];
-  if (!filePath || typeof filePath !== "string") {
-    throw new CliError(
-      "Media upload requires --file <path>. Usage: wpklx media upload --file ./photo.jpg",
-      ExitCode.VALIDATION,
-    );
-  }
+  const fileOpt = parsed.options["file"];
 
   const fields: Record<string, string> = {};
   if (parsed.options["title"] && typeof parsed.options["title"] === "string") {
@@ -308,7 +320,39 @@ async function handleMediaUpload(
   }
 
   const client = new WpClient(config);
-  const response = await client.upload("/wp/v2/media", filePath, fields);
+
+  if (fileOpt === "__stdin__" && parsed.stdinData) {
+    // Binary stdin upload
+    const filename = (parsed.options["title"] as string) ?? (parsed.options["filename"] as string) ?? "upload";
+    const mimeType = (parsed.options["mime-type"] as string) ?? inferMimeType(filename);
+    const blob = new Blob([parsed.stdinData], { type: mimeType });
+
+    // Ensure title is set for FormData filename
+    if (!fields["title"]) {
+      fields["title"] = filename;
+    }
+
+    const response = await client.upload("/wp/v2/media", blob, fields);
+    const output = formatOutput(
+      response.data,
+      parsed.globalFlags.format ?? config.output_format,
+      {
+        fields: parsed.globalFlags.fields,
+        quiet: parsed.globalFlags.quiet,
+      },
+    );
+    console.log(output);
+    return;
+  }
+
+  if (!fileOpt || typeof fileOpt !== "string") {
+    throw new CliError(
+      "Media upload requires --file <path>. Usage: wpklx media upload --file ./photo.jpg",
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const response = await client.upload("/wp/v2/media", fileOpt, fields);
 
   const output = formatOutput(
     response.data,

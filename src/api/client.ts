@@ -60,16 +60,21 @@ export class WpClient {
 
   async upload<T = unknown>(
     path: string,
-    filePath: string,
+    file: string | Blob,
     fields?: Record<string, string>,
   ): Promise<ApiResponse<T>> {
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) {
-      throw new CliError(`File not found: ${filePath}`, 5);
-    }
-
     const formData = new FormData();
-    formData.append("file", file);
+
+    if (typeof file === "string") {
+      const bunFile = Bun.file(file);
+      if (!(await bunFile.exists())) {
+        throw new CliError(`File not found: ${file}`, 5);
+      }
+      formData.append("file", bunFile);
+    } else {
+      const filename = fields?.["title"] ?? "upload";
+      formData.append("file", file, filename);
+    }
 
     if (fields) {
       for (const [key, value] of Object.entries(fields)) {

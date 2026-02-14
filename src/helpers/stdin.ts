@@ -40,16 +40,21 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
       );
     }
 
-    const { text } = await readStdin();
+    const { data, text } = await readStdin();
 
-    if (text.length === 0) {
+    if (data.length === 0) {
       throw new CliError(
         "Stdin is empty — no data to read",
         ExitCode.VALIDATION,
       );
     }
 
-    parsed.options[parsed.stdinFlag] = text;
+    if (parsed.stdinFlag === "file") {
+      parsed.stdinData = data;
+      parsed.options.file = "__stdin__";
+    } else {
+      parsed.options[parsed.stdinFlag] = text;
+    }
     return;
   }
 
@@ -61,9 +66,14 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
   // If the default parameter was already provided via CLI args, ignore stdin
   if (parsed.options[defaultParam] !== undefined) return;
 
-  const { text } = await readStdin();
+  const { data, text } = await readStdin();
 
-  if (text.length === 0) return; // Silently ignore empty bare pipe
+  if (data.length === 0) return; // Silently ignore empty bare pipe
 
-  parsed.options[defaultParam] = text;
+  if (defaultParam === "file") {
+    parsed.stdinData = data;
+    parsed.options.file = "__stdin__";
+  } else {
+    parsed.options[defaultParam] = text;
+  }
 }
