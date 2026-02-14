@@ -1,0 +1,133 @@
+import { renderMarkdown } from "./output.ts";
+import type { CommandMap } from "../api/schema.ts";
+
+/**
+ * Generates and prints global help text.
+ */
+export function showGlobalHelp(version: string): void {
+  const help = `# wpklx v${version}
+
+**KLX WordPress CLI** — dynamic, fault-tolerant CLI for the WordPress REST API.
+
+## Usage
+
+\`wpklx [@profile] <resource> <action> [options]\`
+
+## Built-in Commands
+
+- \`wpklx version\` — Show CLI version
+- \`wpklx discover\` — Discover API routes from WordPress site
+- \`wpklx routes\` — List available API routes
+- \`wpklx config ls\` — List profiles
+- \`wpklx config show\` — Show profile settings
+- \`wpklx config path\` — Show config file path
+- \`wpklx config add <name>\` — Add a new profile
+- \`wpklx config rm <name>\` — Remove a profile
+- \`wpklx config default <name>\` — Set default profile
+- \`wpklx help\` — Show this help
+- \`wpklx <resource> help\` — Show help for a resource
+
+## Global Flags
+
+- \`--format <table|json|yaml>\` — Output format (default: table)
+- \`--fields <field1,field2>\` — Limit output fields
+- \`--per-page <n>\` — Results per page (default: 20)
+- \`--page <n>\` — Page number
+- \`--quiet\` — Minimal output (IDs only)
+- \`--verbose\` — Debug output
+- \`--no-color\` — Disable ANSI colors
+- \`--env <path>\` — Custom .env file path
+
+## Action Shortcuts
+
+\`ls\` → list, \`show\` → get, \`new\` → create, \`edit\` → update, \`rm\` → delete
+
+## Examples
+
+\`\`\`
+wpklx post list --status draft
+wpklx post show 42
+wpklx @staging post create --title "Hello" --status publish
+wpklx media upload --file ./photo.jpg
+\`\`\`
+`;
+
+  console.log(renderMarkdown(help));
+}
+
+/**
+ * Generates and prints resource-specific help.
+ */
+export function showResourceHelp(
+  resource: string,
+  commands: CommandMap,
+): void {
+  const resourceCommands = commands[resource];
+  if (!resourceCommands) {
+    console.log(`Unknown resource: ${resource}`);
+    suggestSimilar(resource, Object.keys(commands));
+    return;
+  }
+
+  const lines: string[] = [`# ${resource}\n`];
+  lines.push(`## Available Actions\n`);
+
+  for (const [action, meta] of Object.entries(resourceCommands)) {
+    lines.push(`### ${action} (${meta.method})\n`);
+    lines.push(`Path: \`${meta.path}\`\n`);
+
+    if (meta.params.length > 0) {
+      lines.push("**Parameters:**\n");
+      for (const param of meta.params) {
+        const required = param.required ? " *(required)*" : "";
+        const type = param.type ? ` \`${param.type}\`` : "";
+        const desc = param.description ? ` — ${param.description}` : "";
+        const enumVals =
+          param.enum ? ` (${param.enum.join(", ")})` : "";
+        lines.push(`- \`--${param.name}\`${type}${required}${desc}${enumVals}`);
+      }
+      lines.push("");
+    }
+  }
+
+  console.log(renderMarkdown(lines.join("\n")));
+}
+
+function suggestSimilar(input: string, candidates: string[]): void {
+  const similar = candidates
+    .map((c) => ({ name: c, distance: levenshtein(input, c) }))
+    .filter((c) => c.distance <= 3)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 3);
+
+  if (similar.length > 0) {
+    console.log(`Did you mean: ${similar.map((s) => s.name).join(", ")}?`);
+  }
+  console.log(`Run \`wpklx routes\` to see available commands.`);
+}
+
+function levenshtein(a: string, b: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= a.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= b.length; j++) {
+    matrix[0]![j] = j;
+  }
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i]![j] = Math.min(
+        matrix[i - 1]![j]! + 1,
+        matrix[i]![j - 1]! + 1,
+        matrix[i - 1]![j - 1]! + cost,
+      );
+    }
+  }
+
+  return matrix[a.length]![b.length]!;
+}
+
+export { levenshtein, suggestSimilar };

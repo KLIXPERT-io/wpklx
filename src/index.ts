@@ -7,7 +7,8 @@ import { resolveConfig } from "./config/settings.ts";
 import { logger } from "./helpers/logger.ts";
 import { handleError } from "./helpers/error.ts";
 import { setNoColor } from "./cli/output.ts";
-import { runDiscover, runRoutes, runConfig } from "./cli/commands.ts";
+import { runDiscover, runRoutes, runConfig, getSchema } from "./cli/commands.ts";
+import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
 
 const version: string = pkg.version;
 
@@ -39,15 +40,32 @@ async function main(): Promise<void> {
   // Load env config
   const envConfig = loadEnvConfig(parsed.globalFlags.env);
 
-  // Handle help early (before config resolution which needs credentials)
+  // Handle global help (no resource or explicit help command)
   if (
-    parsed.globalFlags.help ||
-    parsed.resource === "help" ||
-    parsed.action === "help"
+    (parsed.globalFlags.help && !parsed.resource) ||
+    parsed.resource === "help"
   ) {
-    // TODO: implement in US-024
-    console.log(`wpklx v${version} — WordPress CLI`);
-    console.log(`Usage: wpklx [@profile] <resource> <action> [options]`);
+    showGlobalHelp(version);
+    process.exit(0);
+  }
+
+  // Handle resource-specific help
+  if (parsed.action === "help" || (parsed.globalFlags.help && parsed.resource)) {
+    // Need config to discover schema for resource help
+    try {
+      const config = resolveConfig({
+        cliFlags: parsed.globalFlags,
+        envConfig,
+        yamlProfile: profile,
+        profileName,
+      });
+      const commands = await getSchema(config);
+      showResourceHelp(parsed.resource, commands);
+    } catch {
+      // If config fails, show generic help
+      console.log(`Help for '${parsed.resource}' requires a configured WordPress site.`);
+      console.log(`Run 'wpklx config add <name>' to set up a profile first.`);
+    }
     process.exit(0);
   }
 
@@ -79,9 +97,7 @@ async function main(): Promise<void> {
 
   // No resource specified
   if (!parsed.resource) {
-    console.log(`wpklx v${version} — WordPress CLI`);
-    console.log(`Usage: wpklx [@profile] <resource> <action> [options]`);
-    console.log(`Run 'wpklx help' for more information.`);
+    showGlobalHelp(version);
     process.exit(0);
   }
 
