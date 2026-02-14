@@ -11,6 +11,7 @@ import { setNoColor } from "./cli/output.ts";
 import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./cli/commands.ts";
 import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
 import { runLogin } from "./cli/login.ts";
+import { runSerialize } from "./cli/serialize.ts";
 
 const version: string = pkg.version;
 
@@ -30,6 +31,12 @@ async function main(): Promise<void> {
   // Handle login early (before config resolution — no config needed)
   if (rawArgs[0] === "login") {
     await runLogin();
+    process.exit(0);
+  }
+
+  // Handle serialize early (no config needed — local utility command)
+  if (rawArgs[0] === "serialize") {
+    await runSerialize(rawArgs.slice(1));
     process.exit(0);
   }
 
