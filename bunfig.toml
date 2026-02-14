@@ -1,0 +1,7 @@
+[run]
+# Bun runtime configuration
+smol = false
+
+[install]
+# Use exact versions for reproducible builds
+exact = true

@@ -1,0 +1,7 @@
+# Ralph gitignore
+# Progress files contain session-specific data
+*/progress.txt
+
+# Keep prd.json and task.md tracked
+!*/prd.json
+!*/task.md
