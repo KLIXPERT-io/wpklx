@@ -34,6 +34,7 @@ const GLOBAL_FLAG_NAMES = new Set([
   "--env",
   "--serialize",
   "--markdown",
+  "--no-h1",
 ]);
 
 /**
@@ -109,7 +110,8 @@ export function parseArgs(args: string[]): ParsedArgs {
         arg === "--help" ||
         arg === "--version" ||
         arg === "--serialize" ||
-        arg === "--markdown"
+        arg === "--markdown" ||
+        arg === "--no-h1"
       ) {
         (globalFlags as Record<string, boolean>)[flagName] = true;
         i++;

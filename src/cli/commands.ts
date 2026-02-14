@@ -94,6 +94,11 @@ async function discoverAndCache(config: ResolvedConfig) {
   return schema;
 }
 
+/** Strip the first <h1> element from HTML. */
+function stripFirstH1(html: string): string {
+  return html.replace(/<h1[^>]*>[\s\S]*?<\/h1>\s*/, "");
+}
+
 /**
  * Apply --serialize flag: convert content HTML to WordPress block HTML.
  * Throws if --serialize is set but no content is available.
@@ -116,7 +121,12 @@ async function applySerializeFlag(
     );
   }
 
-  options["content"] = await serializeToBlocks(content as string);
+  let html = content as string;
+  if (parsed.globalFlags.no_h1) {
+    html = stripFirstH1(html);
+  }
+
+  options["content"] = await serializeToBlocks(html);
 }
 
 /**
@@ -149,7 +159,10 @@ async function applyMarkdownFlag(
     );
   }
 
-  const html = markdownToHtml(content as string);
+  let html = markdownToHtml(content as string);
+  if (parsed.globalFlags.no_h1) {
+    html = stripFirstH1(html);
+  }
   options["content"] = await serializeToBlocks(html);
 }
 
