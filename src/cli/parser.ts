@@ -4,12 +4,34 @@ import {
   ConfigError,
 } from "../config/profiles.ts";
 import type { YamlProfile } from "../types/config.ts";
+import type { ParsedArgs, GlobalFlags } from "../types/cli.ts";
 
 export interface ProfileResult {
   profileName: string | null;
   profile: YamlProfile | null;
   remainingArgs: string[];
 }
+
+const ACTION_SHORTCUTS: Record<string, string> = {
+  ls: "list",
+  show: "get",
+  new: "create",
+  edit: "update",
+  rm: "delete",
+};
+
+const GLOBAL_FLAG_NAMES = new Set([
+  "--format",
+  "--fields",
+  "--per-page",
+  "--page",
+  "--quiet",
+  "--verbose",
+  "--no-color",
+  "--help",
+  "--version",
+  "--env",
+]);
 
 /**
  * Detects @name token anywhere in args, extracts the profile name,
@@ -45,4 +67,92 @@ export function extractProfile(args: string[]): ProfileResult {
 
   // No YAML config or no default — will fall back to .env
   return { profileName: null, profile: null, remainingArgs };
+}
+
+/**
+ * Parses CLI arguments into a structured ParsedArgs object.
+ * Expects args with @profile already extracted (use extractProfile first).
+ */
+export function parseArgs(args: string[]): ParsedArgs {
+  const globalFlags: GlobalFlags = {};
+  const positional: string[] = [];
+  const options: Record<string, string | boolean> = {};
+
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i]!;
+
+    if (GLOBAL_FLAG_NAMES.has(arg)) {
+      const flagName = arg.slice(2).replace(/-/g, "_");
+
+      // Boolean global flags
+      if (
+        arg === "--quiet" ||
+        arg === "--verbose" ||
+        arg === "--no-color" ||
+        arg === "--help" ||
+        arg === "--version"
+      ) {
+        (globalFlags as Record<string, boolean>)[flagName] = true;
+        i++;
+        continue;
+      }
+
+      // Value global flags
+      const nextArg = args[i + 1];
+      if (nextArg !== undefined && !nextArg.startsWith("--")) {
+        if (arg === "--per-page" || arg === "--page") {
+          (globalFlags as Record<string, number>)[flagName] = parseInt(
+            nextArg,
+            10,
+          );
+        } else {
+          (globalFlags as Record<string, string>)[flagName] = nextArg;
+        }
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const nextArg = args[i + 1];
+      if (nextArg !== undefined && !nextArg.startsWith("--")) {
+        options[key] = nextArg;
+        i += 2;
+      } else {
+        options[key] = true;
+        i++;
+      }
+      continue;
+    }
+
+    positional.push(arg);
+    i++;
+  }
+
+  const resource = positional[0] ?? "";
+  let action = positional[1] ?? "";
+
+  // Resolve action shortcuts
+  if (ACTION_SHORTCUTS[action]) {
+    action = ACTION_SHORTCUTS[action]!;
+  }
+
+  // Detect positional ID: third positional that looks numeric
+  let id: string | undefined;
+  const thirdPos = positional[2];
+  if (thirdPos && /^\d+$/.test(thirdPos)) {
+    id = thirdPos;
+  }
+
+  // Also check for --id in options
+  if (options["id"] !== undefined && typeof options["id"] === "string") {
+    id = options["id"];
+    delete options["id"];
+  }
+
+  return { resource, action, id, options, globalFlags };
 }
