@@ -15,12 +15,17 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/wordpress__block-library": "2.6.3",
+    "@types/wordpress__blocks": "15.10.0",
     "oxlint": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@wordpress/block-library": "9.39.0",
+    "@wordpress/blocks": "15.12.0",
+    "happy-dom": "20.6.1",
     "yaml": "2.8.2"
   }
 }
