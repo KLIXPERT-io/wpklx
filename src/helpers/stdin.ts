@@ -7,6 +7,9 @@ export interface StdinResult {
   text: string;
 }
 
+/** Actions that don't accept stdin input */
+const READ_ONLY_ACTIONS = new Set(["list", "get", "delete"]);
+
 /** Default stdin parameter mapping by resource name */
 const STDIN_DEFAULT_MAP: Record<string, string> = {
   post: "content",
@@ -32,6 +35,14 @@ export async function readStdin(): Promise<StdinResult> {
  */
 export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
   if (parsed.stdinFlag) {
+    // Reject stdin on read-only actions
+    if (READ_ONLY_ACTIONS.has(parsed.action)) {
+      throw new CliError(
+        `Stdin input is not supported for '${parsed.action}' action`,
+        ExitCode.VALIDATION,
+      );
+    }
+
     // Explicit --flag - was used
     if (process.stdin.isTTY) {
       throw new CliError(
