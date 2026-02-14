@@ -53,7 +53,7 @@ export async function runSerialize(rawArgs: string[]): Promise<void> {
 
   if (opts.file) {
     // --file takes precedence
-    if (!process.stdin.isTTY) {
+    if (!process.stdin.isTTY && !opts.quiet) {
       process.stderr.write("Warning: --file provided, ignoring stdin input\n");
     }
 
@@ -91,7 +91,11 @@ export async function runSerialize(rawArgs: string[]): Promise<void> {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(opts.output, blockHtml);
+    if (!opts.quiet) {
+      process.stderr.write(`Written to ${opts.output}\n`);
+    }
   } else {
-    process.stdout.write(blockHtml);
+    // Strip trailing newlines to avoid artifacts for piped consumers
+    process.stdout.write(blockHtml.replace(/\n+$/, ""));
   }
 }
