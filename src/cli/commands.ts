@@ -1,6 +1,7 @@
 import type { ResolvedConfig } from "../types/config.ts";
 import type { ParsedArgs } from "../types/cli.ts";
 import { discoverSchema } from "../api/discovery.ts";
+import { WpClient } from "../api/client.ts";
 import { loadCachedSchema, saveSchemaCache } from "../api/cache.ts";
 import { mapRoutesToCommands, getResourceNames } from "../api/schema.ts";
 import type { CommandMap } from "../api/schema.ts";
@@ -16,7 +17,9 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { formatOutput } from "./formatters.ts";
 import { renderTable } from "./output.ts";
+import { suggestSimilar } from "./help.ts";
 import { logger } from "../helpers/logger.ts";
+import { CliError, ExitCode } from "../helpers/error.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -79,6 +82,172 @@ async function discoverAndCache(config: ResolvedConfig) {
   const schema = await discoverSchema(config);
   saveSchemaCache(config.host, schema);
   return schema;
+}
+
+/** Execute a dynamic resource command (CRUD). */
+export async function executeCommand(
+  config: ResolvedConfig,
+  parsed: ParsedArgs,
+): Promise<void> {
+  const commands = await getSchema(config);
+  const resourceCommands = commands[parsed.resource];
+
+  if (!resourceCommands) {
+    console.error(`Unknown resource: ${parsed.resource}`);
+    suggestSimilar(parsed.resource, Object.keys(commands));
+    process.exit(ExitCode.NOT_FOUND);
+  }
+
+  const actionMeta = resourceCommands[parsed.action];
+  if (!actionMeta) {
+    const available = Object.keys(resourceCommands).join(", ");
+    throw new CliError(
+      `Unknown action '${parsed.action}' for resource '${parsed.resource}'. Available: ${available}`,
+      ExitCode.NOT_FOUND,
+    );
+  }
+
+  const client = new WpClient(config);
+
+  // Build the actual API path, replacing path params
+  let apiPath = actionMeta.path;
+
+  // Replace regex path params like (?P<id>[\d]+) with actual values
+  if (parsed.id) {
+    apiPath = apiPath.replace(/\/\(\?P<id>[^)]+\)/, `/${parsed.id}`);
+  }
+
+  // Remove remaining regex path params (shouldn't happen but safety)
+  apiPath = apiPath.replace(/\/\(\?P<[^>]+>[^)]+\)/g, "");
+
+  // Build query params / body from parsed options
+  const options = { ...parsed.options } as Record<string, string | boolean>;
+
+  switch (parsed.action) {
+    case "list": {
+      const params: Record<string, string> = {};
+      // Add pagination
+      if (parsed.globalFlags.per_page) {
+        params["per_page"] = String(parsed.globalFlags.per_page);
+      } else {
+        params["per_page"] = String(config.per_page);
+      }
+      if (parsed.globalFlags.page) {
+        params["page"] = String(parsed.globalFlags.page);
+      }
+      // Add other options as query params
+      for (const [key, value] of Object.entries(options)) {
+        params[key] = String(value);
+      }
+
+      const response = await client.get(apiPath, params);
+      const output = formatOutput(
+        response.data,
+        parsed.globalFlags.format ?? config.output_format,
+        {
+          fields: parsed.globalFlags.fields,
+          quiet: parsed.globalFlags.quiet,
+        },
+      );
+      console.log(output);
+      break;
+    }
+
+    case "get": {
+      if (!parsed.id) {
+        throw new CliError(
+          `'get' requires an ID. Usage: wpklx ${parsed.resource} get <id>`,
+          ExitCode.VALIDATION,
+        );
+      }
+      const response = await client.get(apiPath);
+      const output = formatOutput(
+        response.data,
+        parsed.globalFlags.format ?? config.output_format,
+        {
+          fields: parsed.globalFlags.fields,
+          quiet: parsed.globalFlags.quiet,
+        },
+      );
+      console.log(output);
+      break;
+    }
+
+    case "create": {
+      const body: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(options)) {
+        body[key] = value;
+      }
+      const response = await client.post(apiPath, body);
+      const output = formatOutput(
+        response.data,
+        parsed.globalFlags.format ?? config.output_format,
+        {
+          fields: parsed.globalFlags.fields,
+          quiet: parsed.globalFlags.quiet,
+        },
+      );
+      console.log(output);
+      break;
+    }
+
+    case "update": {
+      if (!parsed.id) {
+        throw new CliError(
+          `'update' requires an ID. Usage: wpklx ${parsed.resource} update <id> --field value`,
+          ExitCode.VALIDATION,
+        );
+      }
+      const body: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(options)) {
+        body[key] = value;
+      }
+      const response = await client.patch(apiPath, body);
+      const output = formatOutput(
+        response.data,
+        parsed.globalFlags.format ?? config.output_format,
+        {
+          fields: parsed.globalFlags.fields,
+          quiet: parsed.globalFlags.quiet,
+        },
+      );
+      console.log(output);
+      break;
+    }
+
+    case "delete": {
+      if (!parsed.id) {
+        throw new CliError(
+          `'delete' requires an ID. Usage: wpklx ${parsed.resource} delete <id>`,
+          ExitCode.VALIDATION,
+        );
+      }
+      const params: Record<string, string> = {};
+      if (options["force"]) {
+        params["force"] = "true";
+        delete options["force"];
+      }
+      const response = await client.delete(apiPath, params);
+
+      if (parsed.globalFlags.quiet) {
+        // Quiet mode on delete: no output, just exit code
+      } else {
+        const output = formatOutput(
+          response.data,
+          parsed.globalFlags.format ?? config.output_format,
+          { fields: parsed.globalFlags.fields },
+        );
+        console.log(output);
+      }
+      break;
+    }
+
+    default:
+      throw new CliError(
+        `Unknown action '${parsed.action}'. Use list, get, create, update, or delete.`,
+        ExitCode.VALIDATION,
+      );
+  }
 }
 
 /** Run config subcommands. */

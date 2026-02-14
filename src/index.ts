@@ -7,7 +7,7 @@ import { resolveConfig } from "./config/settings.ts";
 import { logger } from "./helpers/logger.ts";
 import { handleError } from "./helpers/error.ts";
 import { setNoColor } from "./cli/output.ts";
-import { runDiscover, runRoutes, runConfig, getSchema } from "./cli/commands.ts";
+import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./cli/commands.ts";
 import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
 
 const version: string = pkg.version;
@@ -109,9 +109,8 @@ async function main(): Promise<void> {
     profileName,
   });
 
-  // TODO: implement dynamic CRUD in US-025
-  logger.info(`Would execute: ${parsed.resource} ${parsed.action}`);
-  logger.debug(`Config: ${JSON.stringify({ ...config, application_password: "****" })}`);
+  // Execute dynamic resource command
+  await executeCommand(config, parsed);
 }
 
 main().catch(handleError);
