@@ -7,7 +7,7 @@ import { resolveConfig } from "./config/settings.ts";
 import { logger } from "./helpers/logger.ts";
 import { handleError } from "./helpers/error.ts";
 import { setNoColor } from "./cli/output.ts";
-import { runDiscover, runRoutes } from "./cli/commands.ts";
+import { runDiscover, runRoutes, runConfig } from "./cli/commands.ts";
 
 const version: string = pkg.version;
 
@@ -73,8 +73,7 @@ async function main(): Promise<void> {
 
   // Config commands don't need API credentials
   if (parsed.resource === "config") {
-    // TODO: implement in US-022/US-023
-    console.log("Config commands not yet implemented.");
+    runConfig(parsed);
     process.exit(0);
   }
 
