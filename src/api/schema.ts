@@ -16,7 +16,16 @@ export type CommandMap = Record<string, Record<string, CommandMeta>>;
 export function mapRoutesToCommands(schema: DiscoveredSchema): CommandMap {
   const commands: CommandMap = {};
 
-  for (const route of schema.routes) {
+  // Sort routes so wp/v2 (core) routes are processed first.
+  // Combined with first-match-wins below, this ensures core routes
+  // take priority over plugin routes sharing the same resource name.
+  const sortedRoutes = [...schema.routes].sort((a, b) => {
+    const aIsCore = a.namespace === "wp/v2" ? 0 : 1;
+    const bIsCore = b.namespace === "wp/v2" ? 0 : 1;
+    return aIsCore - bIsCore;
+  });
+
+  for (const route of sortedRoutes) {
     const resourceName = extractResourceName(route.path);
     if (!resourceName) continue;
 
