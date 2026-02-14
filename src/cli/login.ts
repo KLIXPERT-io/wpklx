@@ -300,17 +300,29 @@ export async function runLogin(): Promise<void> {
   }
 
   // Choose config scope and default setting
-  const { configPath, setAsDefault } = chooseConfigScope(
+  const { scope, configPath, setAsDefault } = chooseConfigScope(
     credentials.profileName,
   );
 
   // Save config
   saveConfig(configPath, credentials.profileName, credentials, setAsDefault);
 
-  // TODO: US-006 — show success output
-  console.log(
-    `\n${style("Config saved to:", ANSI.dim)} ${configPath}`,
-  );
+  // Success output
+  console.log(`\n${style("Login successful!", ANSI.bold)}\n`);
+  console.log(`  ${style("Config:", ANSI.dim)}   ${configPath}`);
+  console.log(`  ${style("Profile:", ANSI.dim)}  ${credentials.profileName}`);
+  console.log(`  ${style("User:", ANSI.dim)}     ${displayName}`);
+
+  if (scope === "global") {
+    console.log(`\n  ${style("This config applies to all projects.", ANSI.dim)}`);
+  }
+
+  // Show next steps
+  const profileArg =
+    setAsDefault ? "" : ` @${credentials.profileName}`;
+  console.log(`\n${style("Try it out:", ANSI.dim)}`);
+  console.log(style(`  wpklx${profileArg} post list`, ANSI.cyan));
+  console.log();
 }
 
 /** Collect all credentials via interactive prompts. */
