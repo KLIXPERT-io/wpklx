@@ -13,7 +13,9 @@ export function formatTable(
 
   // Determine columns
   let columns: string[];
-  if (fields) {
+  if (fields === "all") {
+    columns = Object.keys(data[0]!);
+  } else if (fields) {
     columns = fields.split(",").map((f) => f.trim());
   } else {
     columns = selectDefaultColumns(data[0]!);
@@ -102,7 +104,7 @@ function filterFields(
   data: unknown,
   fields?: string,
 ): unknown {
-  if (!fields) return data;
+  if (!fields || fields === "all") return data;
 
   const keys = fields.split(",").map((f) => f.trim());
 
