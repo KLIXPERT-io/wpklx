@@ -133,8 +133,16 @@ export function parseArgs(args: string[]): ParsedArgs {
     i++;
   }
 
-  const resource = positional[0] ?? "";
+  let resource = positional[0] ?? "";
   let action = positional[1] ?? "";
+
+  // Detect namespace prefix: "wpml:post" -> prefix="wpml", resource="post"
+  let namespacePrefix: string | undefined;
+  if (resource.includes(":")) {
+    const colonIndex = resource.indexOf(":");
+    namespacePrefix = resource.slice(0, colonIndex);
+    resource = resource.slice(colonIndex + 1);
+  }
 
   // Resolve action shortcuts
   if (ACTION_SHORTCUTS[action]) {
@@ -154,5 +162,5 @@ export function parseArgs(args: string[]): ParsedArgs {
     delete options["id"];
   }
 
-  return { resource, action, id, options, globalFlags };
+  return { resource, action, id, namespacePrefix, options, globalFlags };
 }

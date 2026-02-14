@@ -12,8 +12,12 @@ export type CommandMap = Record<string, Record<string, CommandMeta>>;
 /**
  * Maps discovered REST routes to CLI command metadata.
  * Groups by resource name with actions (list, get, create, update, delete).
+ * When namespaceFilter is provided, only routes from that namespace are included.
  */
-export function mapRoutesToCommands(schema: DiscoveredSchema): CommandMap {
+export function mapRoutesToCommands(
+  schema: DiscoveredSchema,
+  namespaceFilter?: string,
+): CommandMap {
   const commands: CommandMap = {};
 
   // Sort routes so wp/v2 (core) routes are processed first.
@@ -26,6 +30,10 @@ export function mapRoutesToCommands(schema: DiscoveredSchema): CommandMap {
   });
 
   for (const route of sortedRoutes) {
+    // Filter by namespace if specified
+    if (namespaceFilter && !route.namespace.startsWith(namespaceFilter)) {
+      continue;
+    }
     const resourceName = extractResourceName(route.path);
     if (!resourceName) continue;
 
@@ -116,6 +124,31 @@ function mapParam(param: RouteParam): CommandParam {
     description: param.description,
     enum: param.enum,
   };
+}
+
+/**
+ * Resolves a short namespace prefix (e.g., "wpml") to a full namespace
+ * (e.g., "wpml/v1") by matching against discovered namespaces.
+ * Returns the matching namespace or null if no match found.
+ */
+export function resolveNamespacePrefix(
+  namespaces: string[],
+  prefix: string,
+): string | null {
+  // Exact match first
+  const exact = namespaces.find((ns) => ns === prefix);
+  if (exact) return exact;
+
+  // Prefix match: "wpml" matches "wpml/v1"
+  const matches = namespaces.filter((ns) => ns.startsWith(prefix + "/"));
+  if (matches.length === 1) return matches[0]!;
+
+  // If multiple matches, prefer highest version
+  if (matches.length > 1) {
+    return matches.sort().reverse()[0]!;
+  }
+
+  return null;
 }
 
 /** Get all unique resource names from the command map. */

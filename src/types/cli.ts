@@ -17,6 +17,7 @@ export interface ParsedArgs {
   resource: string;
   action: string;
   id?: string;
+  namespacePrefix?: string;
   options: Record<string, string | boolean>;
   globalFlags: GlobalFlags;
 }

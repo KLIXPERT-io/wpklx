@@ -3,8 +3,9 @@ import type { ParsedArgs } from "../types/cli.ts";
 import { discoverSchema } from "../api/discovery.ts";
 import { WpClient } from "../api/client.ts";
 import { loadCachedSchema, saveSchemaCache } from "../api/cache.ts";
-import { mapRoutesToCommands, getResourceNames } from "../api/schema.ts";
+import { mapRoutesToCommands, getResourceNames, resolveNamespacePrefix } from "../api/schema.ts";
 import type { CommandMap } from "../api/schema.ts";
+import type { DiscoveredSchema } from "../types/api.ts";
 import {
   loadYamlConfig,
   findConfigPath,
@@ -40,21 +41,22 @@ export async function runRoutes(
   config: ResolvedConfig,
   parsed: ParsedArgs,
 ): Promise<void> {
-  const schema =
-    loadCachedSchema(config.host, config.cache_ttl) ??
-    (await discoverAndCache(config));
-
+  const schema = await getRawSchema(config);
   const commands = mapRoutesToCommands(schema);
 
-  // Build table data
-  const rows: { Resource: string; Action: string; Method: string; Path: string }[] = [];
+  // Build table data with Namespace column
+  const rows: { Resource: string; Action: string; Method: string; Namespace: string; Path: string }[] = [];
 
   for (const [resource, actions] of Object.entries(commands)) {
     for (const [action, meta] of Object.entries(actions)) {
+      // Extract namespace from path: "/wp/v2/posts" -> "wp/v2"
+      const pathSegments = meta.path.replace(/^\//, "").split("/");
+      const ns = pathSegments.length >= 2 ? `${pathSegments[0]}/${pathSegments[1]}` : "";
       rows.push({
         Resource: resource,
         Action: action,
         Method: meta.method,
+        Namespace: ns,
         Path: meta.path,
       });
     }
@@ -72,10 +74,16 @@ export async function runRoutes(
 
 /** Get or discover the schema, caching the result. */
 export async function getSchema(config: ResolvedConfig): Promise<CommandMap> {
-  const schema =
-    loadCachedSchema(config.host, config.cache_ttl) ??
-    (await discoverAndCache(config));
+  const schema = await getRawSchema(config);
   return mapRoutesToCommands(schema);
+}
+
+/** Get the raw discovered schema (cached or fresh). */
+async function getRawSchema(config: ResolvedConfig): Promise<DiscoveredSchema> {
+  return (
+    loadCachedSchema(config.host, config.cache_ttl) ??
+    (await discoverAndCache(config))
+  );
 }
 
 async function discoverAndCache(config: ResolvedConfig) {
@@ -95,7 +103,26 @@ export async function executeCommand(
     return;
   }
 
-  const commands = await getSchema(config);
+  const schema = await getRawSchema(config);
+
+  // Resolve namespace prefix if specified (e.g., "wpml:post")
+  let namespaceFilter: string | undefined;
+  if (parsed.namespacePrefix) {
+    const resolved = resolveNamespacePrefix(
+      schema.namespaces,
+      parsed.namespacePrefix,
+    );
+    if (!resolved) {
+      console.error(
+        `Unknown namespace: ${parsed.namespacePrefix}`,
+      );
+      suggestSimilar(parsed.namespacePrefix, schema.namespaces);
+      process.exit(ExitCode.NOT_FOUND);
+    }
+    namespaceFilter = resolved;
+  }
+
+  const commands = mapRoutesToCommands(schema, namespaceFilter);
   const resourceCommands = commands[parsed.resource];
 
   if (!resourceCommands) {
