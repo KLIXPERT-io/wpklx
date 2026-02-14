@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 
   // Config commands don't need API credentials
   if (parsed.resource === "config") {
-    runConfig(parsed);
+    await runConfig(parsed);
     process.exit(0);
   }
 

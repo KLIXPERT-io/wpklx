@@ -8,7 +8,12 @@ import {
   loadYamlConfig,
   findConfigPath,
   resolveProfile,
+  ConfigError,
 } from "../config/profiles.ts";
+import { stringify, parse } from "yaml";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { formatOutput } from "./formatters.ts";
 import { renderTable } from "./output.ts";
 import { logger } from "../helpers/logger.ts";
@@ -76,8 +81,8 @@ async function discoverAndCache(config: ResolvedConfig) {
   return schema;
 }
 
-/** Run config subcommands (ls, show, path). */
-export function runConfig(parsed: ParsedArgs): void {
+/** Run config subcommands. */
+export async function runConfig(parsed: ParsedArgs): Promise<void> {
   const subcommand = parsed.action;
 
   switch (subcommand) {
@@ -92,9 +97,21 @@ export function runConfig(parsed: ParsedArgs): void {
     case "path":
       configPath();
       break;
+    case "add":
+    case "new":
+    case "create":
+      await configAdd(parsed);
+      break;
+    case "rm":
+    case "delete":
+      configRm(parsed);
+      break;
+    case "default":
+      configDefault(parsed);
+      break;
     default:
       console.log(`Unknown config subcommand: ${subcommand}`);
-      console.log(`Available: ls, show, path`);
+      console.log(`Available: ls, show, path, add, rm, default`);
       process.exit(1);
   }
 }
@@ -160,4 +177,131 @@ function configPath(): void {
       "Create wpklx.config.yaml in your project or ~/.config/wpklx/config.yaml",
     );
   }
+}
+
+async function configAdd(parsed: ParsedArgs): Promise<void> {
+  const name = parsed.id;
+  if (!name) {
+    console.log("Usage: wpklx config add <profile-name>");
+    process.exit(1);
+  }
+
+  // Interactive prompts using Bun's console prompt
+  const host = prompt("Host (e.g., https://example.com):");
+  const username = prompt("Username:");
+  const applicationPassword = prompt("Application Password:");
+
+  if (!host || !username || !applicationPassword) {
+    console.log("All fields are required.");
+    process.exit(1);
+  }
+
+  // Optional settings
+  const apiPrefix = prompt("API prefix [/wp-json]:");
+  const perPage = prompt("Per page [20]:");
+
+  const profile: Record<string, unknown> = {
+    host,
+    username,
+    application_password: applicationPassword,
+  };
+
+  if (apiPrefix) profile["api_prefix"] = apiPrefix;
+  if (perPage) profile["per_page"] = parseInt(perPage, 10);
+
+  // Load or create config
+  let configPath = findConfigPath();
+  let configData: Record<string, unknown>;
+
+  if (configPath) {
+    const content = readFileSync(configPath, "utf-8");
+    configData = (parse(content) as Record<string, unknown>) ?? {};
+  } else {
+    // Create in ~/.config/wpklx/
+    const configDir = join(homedir(), ".config", "wpklx");
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true });
+    }
+    configPath = join(configDir, "config.yaml");
+    configData = {};
+  }
+
+  if (!configData["profiles"]) {
+    configData["profiles"] = {};
+  }
+
+  const profiles = configData["profiles"] as Record<string, unknown>;
+  profiles[name] = profile;
+
+  // Set as default if it's the first profile
+  if (!configData["default"]) {
+    configData["default"] = name;
+  }
+
+  writeFileSync(configPath, stringify(configData));
+  console.log(`Profile '${name}' added to ${configPath}`);
+}
+
+function configRm(parsed: ParsedArgs): void {
+  const name = parsed.id;
+  if (!name) {
+    console.log("Usage: wpklx config rm <profile-name>");
+    process.exit(1);
+  }
+
+  const configPath = findConfigPath();
+  if (!configPath) {
+    throw new ConfigError("No config file found.");
+  }
+
+  const content = readFileSync(configPath, "utf-8");
+  const configData = (parse(content) as Record<string, unknown>) ?? {};
+  const profiles = (configData["profiles"] as Record<string, unknown>) ?? {};
+
+  if (!(name in profiles)) {
+    throw new ConfigError(`Profile '${name}' not found.`);
+  }
+
+  // Refuse to remove default unless another exists
+  if (configData["default"] === name && Object.keys(profiles).length > 1) {
+    throw new ConfigError(
+      `Cannot remove default profile '${name}'. Set another profile as default first with: wpklx config default <other-profile>`,
+    );
+  }
+
+  delete profiles[name];
+
+  // If removed the default and it was the only one, clear default
+  if (configData["default"] === name) {
+    delete configData["default"];
+  }
+
+  writeFileSync(configPath, stringify(configData));
+  console.log(`Profile '${name}' removed.`);
+}
+
+function configDefault(parsed: ParsedArgs): void {
+  const name = parsed.id;
+  if (!name) {
+    console.log("Usage: wpklx config default <profile-name>");
+    process.exit(1);
+  }
+
+  const configPath = findConfigPath();
+  if (!configPath) {
+    throw new ConfigError("No config file found.");
+  }
+
+  const content = readFileSync(configPath, "utf-8");
+  const configData = (parse(content) as Record<string, unknown>) ?? {};
+  const profiles = (configData["profiles"] as Record<string, unknown>) ?? {};
+
+  if (!(name in profiles)) {
+    throw new ConfigError(`Profile '${name}' not found.`);
+  }
+
+  configData["default"] = name;
+
+  writeFileSync(configPath, stringify(configData));
+  console.log(`Default profile set to '${name}'.`);
 }
