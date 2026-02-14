@@ -20,6 +20,7 @@ export interface ParsedArgs {
   namespacePrefix?: string;
   options: Record<string, string | boolean>;
   globalFlags: GlobalFlags;
+  stdinFlag?: string;
 }
 
 /** Metadata for a single CLI command derived from API schema */

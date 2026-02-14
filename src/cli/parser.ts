@@ -5,6 +5,7 @@ import {
 } from "../config/profiles.ts";
 import type { YamlProfile } from "../types/config.ts";
 import type { ParsedArgs, GlobalFlags } from "../types/cli.ts";
+import { CliError, ExitCode } from "../helpers/error.ts";
 
 export interface ProfileResult {
   profileName: string | null;
@@ -77,6 +78,7 @@ export function parseArgs(args: string[]): ParsedArgs {
   const globalFlags: GlobalFlags = {};
   const positional: string[] = [];
   const options: Record<string, string | boolean> = {};
+  let stdinFlag: string | undefined;
 
   let i = 0;
   while (i < args.length) {
@@ -119,7 +121,17 @@ export function parseArgs(args: string[]): ParsedArgs {
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
       const nextArg = args[i + 1];
-      if (nextArg !== undefined && !nextArg.startsWith("--")) {
+      // Detect --flag - (stdin sentinel)
+      if (nextArg === "-") {
+        if (stdinFlag) {
+          throw new CliError(
+            `Only one flag can read from stdin. Found: --${stdinFlag}, --${key}`,
+            ExitCode.VALIDATION,
+          );
+        }
+        stdinFlag = key;
+        i += 2;
+      } else if (nextArg !== undefined && !nextArg.startsWith("--")) {
         options[key] = nextArg;
         i += 2;
       } else {
@@ -162,5 +174,5 @@ export function parseArgs(args: string[]): ParsedArgs {
     delete options["id"];
   }
 
-  return { resource, action, id, namespacePrefix, options, globalFlags };
+  return { resource, action, id, namespacePrefix, options, globalFlags, stdinFlag };
 }

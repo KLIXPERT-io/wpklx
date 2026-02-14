@@ -6,6 +6,7 @@ import { loadEnvConfig } from "./config/env.ts";
 import { resolveConfig } from "./config/settings.ts";
 import { logger } from "./helpers/logger.ts";
 import { handleError } from "./helpers/error.ts";
+import { resolveStdin } from "./helpers/stdin.ts";
 import { setNoColor } from "./cli/output.ts";
 import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./cli/commands.ts";
 import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
@@ -43,6 +44,9 @@ async function main(): Promise<void> {
     noColor: parsed.globalFlags.no_color,
   });
   setNoColor(parsed.globalFlags.no_color === true);
+
+  // Resolve stdin if --flag - was used
+  await resolveStdin(parsed);
 
   // Load env config
   const envConfig = loadEnvConfig(parsed.globalFlags.env);
