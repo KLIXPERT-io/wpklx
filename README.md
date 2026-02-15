@@ -24,14 +24,19 @@ No code changes required.
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/wpklx.git
+curl -fsSL https://raw.githubusercontent.com/KLIXPERT-io/wpklx/main/install.sh | bash
+```
+
+This downloads the latest binary for your platform to `~/.local/bin/wpklx`.
+
+Pre-built binaries are available for Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64 on the [releases page](https://github.com/KLIXPERT-io/wpklx/releases/tag/latest).
+
+### From source
+
+```bash
+git clone https://github.com/KLIXPERT-io/wpklx.git
 cd wpklx
-
-# Install dependencies
 bun install
-
-# Link globally
 bun link
 ```
 

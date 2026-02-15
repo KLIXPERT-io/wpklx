@@ -8,6 +8,12 @@ allowed-tools: Bash(wpklx:*)
 
 wpklx is a dynamic CLI for the WordPress REST API. It discovers routes at runtime from `/wp-json` — any resource registered by WordPress core or plugins becomes a CLI command automatically.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KLIXPERT-io/wpklx/main/install.sh | bash
+```
+
 ## Quick start
 
 ```bash
