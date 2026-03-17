@@ -21,6 +21,7 @@ import { renderTable } from "./output.ts";
 import { suggestSimilar } from "./help.ts";
 import { logger } from "../helpers/logger.ts";
 import { CliError, ExitCode } from "../helpers/error.ts";
+import { safeExit } from "../helpers/exit.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
 import { markdownToHtml } from "../vendor/mmd.ts";
 
@@ -191,7 +192,7 @@ export async function executeCommand(
         `Unknown namespace: ${parsed.namespacePrefix}`,
       );
       suggestSimilar(parsed.namespacePrefix, schema.namespaces);
-      process.exit(ExitCode.NOT_FOUND);
+      await safeExit(ExitCode.NOT_FOUND);
     }
     namespaceFilter = resolved;
   }
@@ -202,7 +203,7 @@ export async function executeCommand(
   if (!resourceCommands) {
     console.error(`Unknown resource: ${parsed.resource}`);
     suggestSimilar(parsed.resource, Object.keys(commands));
-    process.exit(ExitCode.NOT_FOUND);
+    await safeExit(ExitCode.NOT_FOUND);
   }
 
   const actionMeta = resourceCommands[parsed.action];
@@ -466,15 +467,15 @@ export async function runConfig(parsed: ParsedArgs): Promise<void> {
       break;
     case "rm":
     case "delete":
-      configRm(parsed);
+      await configRm(parsed);
       break;
     case "default":
-      configDefault(parsed);
+      await configDefault(parsed);
       break;
     default:
       console.log(`Unknown config subcommand: ${subcommand}`);
       console.log(`Available: ls, show, path, add, rm, default`);
-      process.exit(1);
+      await safeExit(1);
   }
 }
 
@@ -545,7 +546,7 @@ async function configAdd(parsed: ParsedArgs): Promise<void> {
   const name = parsed.id;
   if (!name) {
     console.log("Usage: wpklx config add <profile-name>");
-    process.exit(1);
+    await safeExit(1);
   }
 
   // Interactive prompts using Bun's console prompt
@@ -555,7 +556,7 @@ async function configAdd(parsed: ParsedArgs): Promise<void> {
 
   if (!host || !username || !applicationPassword) {
     console.log("All fields are required.");
-    process.exit(1);
+    await safeExit(1);
   }
 
   // Optional settings
@@ -604,11 +605,11 @@ async function configAdd(parsed: ParsedArgs): Promise<void> {
   console.log(`Profile '${name}' added to ${configPath}`);
 }
 
-function configRm(parsed: ParsedArgs): void {
+async function configRm(parsed: ParsedArgs): Promise<void> {
   const name = parsed.id;
   if (!name) {
     console.log("Usage: wpklx config rm <profile-name>");
-    process.exit(1);
+    await safeExit(1);
   }
 
   const configPath = findConfigPath();
@@ -642,11 +643,11 @@ function configRm(parsed: ParsedArgs): void {
   console.log(`Profile '${name}' removed.`);
 }
 
-function configDefault(parsed: ParsedArgs): void {
+async function configDefault(parsed: ParsedArgs): Promise<void> {
   const name = parsed.id;
   if (!name) {
     console.log("Usage: wpklx config default <profile-name>");
-    process.exit(1);
+    await safeExit(1);
   }
 
   const configPath = findConfigPath();

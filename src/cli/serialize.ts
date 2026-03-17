@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { readStdin } from "../helpers/stdin.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
+import { safeExit } from "../helpers/exit.ts";
 
 export interface SerializeOptions {
   file?: string;
@@ -59,7 +60,7 @@ export async function runSerialize(rawArgs: string[]): Promise<void> {
 
     if (!existsSync(opts.file)) {
       process.stderr.write(`Error: File not found: ${opts.file}\n`);
-      process.exit(1);
+      await safeExit(1);
     }
 
     html = readFileSync(opts.file, "utf-8");
@@ -71,12 +72,12 @@ export async function runSerialize(rawArgs: string[]): Promise<void> {
     process.stderr.write(
       "Error: No input provided. Use --file <path> or pipe HTML via stdin.\n",
     );
-    process.exit(1);
+    await safeExit(1);
   }
 
   if (!html.trim()) {
     process.stderr.write("Error: Input is empty\n");
-    process.exit(1);
+    await safeExit(1);
   }
 
   if (opts.noH1) {

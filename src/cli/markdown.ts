@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { readStdin } from "../helpers/stdin.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
 import { markdownToHtml } from "../vendor/mmd.ts";
+import { safeExit } from "../helpers/exit.ts";
 
 export interface MarkdownOptions {
   file?: string;
@@ -60,7 +61,7 @@ export async function runMarkdown(rawArgs: string[]): Promise<void> {
 
     if (!existsSync(opts.file)) {
       process.stderr.write(`Error: File not found: ${opts.file}\n`);
-      process.exit(1);
+      await safeExit(1);
     }
 
     md = readFileSync(opts.file, "utf-8");
@@ -72,12 +73,12 @@ export async function runMarkdown(rawArgs: string[]): Promise<void> {
     process.stderr.write(
       "Error: No input provided. Use --file <path> or pipe Markdown via stdin.\n",
     );
-    process.exit(1);
+    await safeExit(1);
   }
 
   if (!md.trim()) {
     process.stderr.write("Error: Input is empty\n");
-    process.exit(1);
+    await safeExit(1);
   }
 
   // Convert Markdown → HTML

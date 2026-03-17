@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+import { safeExit } from "../helpers/exit.ts";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -279,23 +280,23 @@ export async function runLogin(): Promise<void> {
 
     if (result.errorType === "auth") {
       const retry = promptConfirm("Re-enter username and password?");
-      if (!retry) process.exit(1);
+      if (!retry) await safeExit(1);
 
       credentials.username = promptInput("WordPress username");
-      if (!credentials.username) process.exit(1);
+      if (!credentials.username) await safeExit(1);
 
       const rawPassword = await promptPassword("Application password");
-      if (!rawPassword) process.exit(1);
+      if (!rawPassword) await safeExit(1);
       credentials.applicationPassword = rawPassword.replace(/\s/g, "");
     } else if (result.errorType === "network" || result.errorType === "ssl") {
       const retry = promptConfirm("Re-enter host URL?");
-      if (!retry) process.exit(1);
+      if (!retry) await safeExit(1);
 
       const rawHost = promptInput("WordPress site URL (e.g., example.com)");
-      if (!rawHost) process.exit(1);
+      if (!rawHost) await safeExit(1);
       credentials.host = normalizeHost(rawHost);
     } else {
-      process.exit(1);
+      await safeExit(1);
     }
   }
 
@@ -331,7 +332,7 @@ export async function collectCredentials(): Promise<LoginCredentials> {
   const rawHost = promptInput("WordPress site URL (e.g., example.com)");
   if (!rawHost) {
     console.error("Host URL is required.");
-    process.exit(1);
+    await safeExit(1);
   }
   const host = normalizeHost(rawHost);
 
@@ -347,14 +348,14 @@ export async function collectCredentials(): Promise<LoginCredentials> {
   const username = promptInput("WordPress username");
   if (!username) {
     console.error("Username is required.");
-    process.exit(1);
+    await safeExit(1);
   }
 
   // 4. Application password (masked input, strip whitespace)
   const rawPassword = await promptPassword("Application password");
   if (!rawPassword) {
     console.error("Application password is required.");
-    process.exit(1);
+    await safeExit(1);
   }
   const applicationPassword = rawPassword.replace(/\s/g, "");
 

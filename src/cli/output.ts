@@ -12,7 +12,9 @@ const ANSI = {
 let noColor = false;
 
 export function setNoColor(value: boolean): void {
-  noColor = value || (process.env["NO_COLOR"] !== undefined && process.env["NO_COLOR"] !== "");
+  noColor = value
+    || !process.stdout.isTTY
+    || (process.env["NO_COLOR"] !== undefined && process.env["NO_COLOR"] !== "");
 }
 
 function style(text: string, ...codes: string[]): string {

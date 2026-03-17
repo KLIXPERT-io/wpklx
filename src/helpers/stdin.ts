@@ -72,6 +72,19 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
   // Bare pipe: stdin is piped but no --flag - was specified
   if (process.stdin.isTTY) return;
 
+  // Skip stdin for read-only actions and commands that don't use content
+  if (READ_ONLY_ACTIONS.has(parsed.action)) return;
+
+  // Skip stdin for built-in commands that never accept piped content
+  const NO_STDIN_RESOURCES = new Set([
+    "help", "version", "discover", "routes", "config", "login",
+    "serialize", "markdown",
+  ]);
+  if (NO_STDIN_RESOURCES.has(parsed.resource)) return;
+
+  // Skip when there's no action (e.g., bare "wpklx" or "wpklx help")
+  if (!parsed.action || parsed.action === "help") return;
+
   const defaultParam = STDIN_DEFAULT_MAP[parsed.resource] ?? "content";
 
   // If the default parameter was already provided via CLI args, ignore stdin

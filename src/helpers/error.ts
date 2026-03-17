@@ -1,4 +1,5 @@
 import { logger } from "./logger.ts";
+import { safeExit } from "./exit.ts";
 import type { ApiError } from "../types/api.ts";
 
 /** Exit codes as defined in CLAUDE.md */
@@ -99,17 +100,17 @@ export function formatNetworkError(error: Error, host?: string): CliError {
 }
 
 /** Handles an error by logging it and exiting with the correct code. */
-export function handleError(error: unknown): never {
+export async function handleError(error: unknown): Promise<never> {
   if (error instanceof CliError) {
     logger.error(error.message);
-    process.exit(error.exitCode);
+    await safeExit(error.exitCode);
   }
 
   if (error instanceof Error) {
     logger.error(error.message);
-    process.exit(ExitCode.GENERAL);
+    await safeExit(ExitCode.GENERAL);
   }
 
   logger.error(String(error));
-  process.exit(ExitCode.GENERAL);
+  await safeExit(ExitCode.GENERAL);
 }
