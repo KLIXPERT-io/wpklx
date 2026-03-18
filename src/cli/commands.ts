@@ -268,7 +268,11 @@ export async function executeCommand(
           ExitCode.VALIDATION,
         );
       }
-      const response = await client.get(apiPath);
+      const getParams: Record<string, string> = {};
+      for (const [key, value] of Object.entries(options)) {
+        getParams[key] = String(value);
+      }
+      const response = await client.get(apiPath, getParams);
       const output = formatOutput(
         response.data,
         parsed.globalFlags.format ?? config.output_format,
