@@ -142,6 +142,28 @@ Resolution order: CLI flags > environment variables > YAML profile > built-in de
 Environment variables: WP_HOST, WP_USERNAME, WP_APPLICATION_PASSWORD,
 WP_API_PREFIX, WP_PER_PAGE, WP_TIMEOUT, WP_VERIFY_SSL, WP_OUTPUT_FORMAT
 
+## Safe Mode
+
+- \`--revision\` — Save a local snapshot before any \`update\` or \`delete\`. Your safety net for destructive operations.
+
+Snapshots are stored in \`~/.config/wpklx/revisions/\` (up to 10 per resource, oldest auto-pruned).
+
+**Restore workflow:**
+
+- \`wpklx <resource> revisions <id>\` — List saved snapshots for a resource
+- \`wpklx <resource> restore <id>\` — Restore the most recent snapshot
+- \`wpklx <resource> restore <id> --rev N\` — Restore a specific snapshot (1=latest)
+
+**Examples:**
+
+\`wpklx post edit 42 --title "New Title" --revision\` — Update with snapshot
+\`wpklx post rm 42 --revision\` — Delete with snapshot
+\`wpklx post revisions 42\` — List snapshots for post 42
+\`wpklx post restore 42\` — Restore the latest snapshot
+\`wpklx post restore 42 --rev 2\` — Restore the second-latest snapshot
+
+Note: only fields accepted by the update endpoint are restored (smart field filtering).
+
 ## Environment Flags
 
 - \`--env <path>\` — Load a custom .env file instead of the default .env in cwd.
@@ -268,11 +290,13 @@ export function showResourceHelp(
       lines.push(`- \`wpklx ${resource} update 42 --title "Updated Title"\``);
       lines.push(`- \`wpklx ${resource} edit 42 --status publish\``);
       lines.push(`- \`wpklx ${resource} edit 42 --content "$(cat file.html)" --serialize\``);
+      lines.push(`- \`wpklx ${resource} edit 42 --title "Risky change" --revision\` — save a snapshot first`);
       lines.push("");
     } else if (action === "delete") {
       lines.push("**Examples:**\n");
       lines.push(`- \`wpklx ${resource} delete 42\``);
       lines.push(`- \`wpklx ${resource} rm 42 --force true\``);
+      lines.push(`- \`wpklx ${resource} rm 42 --revision\` — save a snapshot before deleting`);
       lines.push("");
     }
   }

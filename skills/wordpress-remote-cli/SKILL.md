@@ -111,6 +111,13 @@ Note: `@name` and `--profile` cannot be used together — use one or the other.
 
 Note: `--serialize` and `--markdown` are mutually exclusive.
 
+### Safe mode flag
+
+```
+--revision                   Save a local snapshot before update/delete. Safety net for destructive operations.
+--rev <n>                    Select a specific revision when restoring (1=latest, default).
+```
+
 ### Other flags
 
 ```
@@ -279,6 +286,50 @@ All error messages include what went wrong, why, and remediation steps. For exam
 | 5    | Validation error     | Missing required fields, invalid values. Fix: `wpklx <resource> help` to see accepted parameters |
 | 6    | Network/timeout      | Timeout, DNS failure, SSL error, connection refused. Fix: check URL with `wpklx config show` |
 
+## Safe Mode / Revisions
+
+The `--revision` flag creates a local snapshot of a resource before any `update` or `delete` operation. Snapshots are stored in `~/.config/wpklx/revisions/` with up to 10 revisions kept per resource (oldest auto-pruned).
+
+### Pseudo-actions
+
+Two local commands manage revisions (no API call needed):
+
+```bash
+wpklx <resource> revisions <id>            # List saved snapshots for a resource
+wpklx <resource> restore <id>              # Restore the most recent snapshot
+wpklx <resource> restore <id> --rev <n>    # Restore a specific snapshot (1=latest)
+```
+
+### Workflow example
+
+```bash
+# Update with safety net
+wpklx post update 42 --title "New Title" --revision
+
+# Oops — list snapshots
+wpklx post revisions 42
+
+# Restore previous state
+wpklx post restore 42
+
+# Or restore a specific revision
+wpklx post restore 42 --rev 2
+```
+
+### Delete with safety net
+
+```bash
+wpklx post delete 42 --revision
+# Post is deleted, but a snapshot was saved first
+wpklx post restore 42
+# Post is re-created from the snapshot
+```
+
+Notes:
+- Only fields accepted by the resource's update endpoint are restored (smart field filtering).
+- Snapshots are profile-scoped — stored under `~/.config/wpklx/revisions/{profile}/{resource}/{id}/`.
+- `--revision` can be combined with any other flags on update/delete commands.
+
 ## Best practices
 
 - Always run `wpklx discover` after installing or removing WordPress plugins to refresh the route cache.
@@ -289,6 +340,7 @@ All error messages include what went wrong, why, and remediation steps. For exam
 - Use `--fields=all` to inspect the full data shape before selecting specific fields.
 - Prefer positional IDs (`wpklx post get 42`) over `--id 42` for brevity.
 - Use `--serialize` or `--markdown` with `--no-h1` when the first heading duplicates the post title.
+- Use `--revision` on update/delete commands to create a safety net. Restore with `wpklx <resource> restore <id>`.
 
 ## Complex examples
 
