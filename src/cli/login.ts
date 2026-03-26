@@ -329,22 +329,25 @@ export async function runLogin(): Promise<void> {
 /** Collect all credentials via interactive prompts. */
 export async function collectCredentials(): Promise<LoginCredentials> {
   // 1. WordPress site URL
-  const rawHost = promptInput("WordPress site URL (e.g., example.com)");
+  console.log(style("  The CLI will connect to {url}/wp-json to discover the API.", ANSI.dim));
+  console.log();
+  const rawHost = promptInput("WordPress site URL (e.g., myblog.com or https://myblog.com/wp)");
   if (!rawHost) {
     console.error("Host URL is required.");
     await safeExit(1);
   }
   const host = normalizeHost(rawHost);
 
-  // 2. Show application password URL
+  // 2. Show application password URL and guidance
   const appPasswordUrl = `${host}/wp-admin/authorize-application.php`;
   console.log(
-    `\n${style("Create an application password at:", ANSI.dim)}`,
+    `\n${style("To authenticate, you need an Application Password (not your login password).", ANSI.dim)}`,
   );
-  console.log(style(`  ${appPasswordUrl}`, ANSI.cyan));
+  console.log(style(`  Create one at: ${appPasswordUrl}`, ANSI.cyan));
   console.log();
 
   // 3. Username
+  console.log(style("  The username you log in to wp-admin with.", ANSI.dim));
   const username = promptInput("WordPress username");
   if (!username) {
     console.error("Username is required.");
@@ -352,6 +355,7 @@ export async function collectCredentials(): Promise<LoginCredentials> {
   }
 
   // 4. Application password (masked input, strip whitespace)
+  console.log(style("\n  Paste the application password generated above. It looks like: XXXX XXXX XXXX XXXX XXXX XXXX", ANSI.dim));
   const rawPassword = await promptPassword("Application password");
   if (!rawPassword) {
     console.error("Application password is required.");
@@ -360,6 +364,7 @@ export async function collectCredentials(): Promise<LoginCredentials> {
   const applicationPassword = rawPassword.replace(/\s/g, "");
 
   // 5. Profile name
+  console.log(style("\n  Profiles let you manage multiple sites. Use a short name like \"production\" or \"staging\".", ANSI.dim));
   const profileName = promptInput("Profile name", "default");
 
   return { host, username, applicationPassword, profileName };

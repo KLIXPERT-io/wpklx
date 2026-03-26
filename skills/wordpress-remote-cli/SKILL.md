@@ -28,10 +28,10 @@ wpklx post create --title "Hello World"  # Create a new post
 ## Syntax
 
 ```
-wpklx [@profile] <resource> <action> [id] [--option value] [flags]
+wpklx [--profile <name> | @name] <resource> <action> [id] [--option value] [flags]
 ```
 
-- `@profile` — optional, selects a named site profile (e.g., `@staging`, `@local`)
+- `--profile <name>` / `-p <name>` / `@name` — optional, selects a named site profile (e.g., `--profile staging`, `-p staging`, `@staging`). All three forms are equivalent.
 - `<resource>` — the WordPress resource (post, page, media, user, category, tag, comment, or any plugin resource)
 - `<action>` — CRUD action or shortcut
 - `[id]` — positional ID (alternative to `--id <n>`)
@@ -74,18 +74,47 @@ wpklx config path               # Print config file path in use
 
 ## Global flags
 
+### Profile selection
+
 ```
---format <table|json|yaml>   Output format (default: table)
---fields <list|all>          Comma-separated fields, or "all" for every column
---per-page <n>               Items per page (default: 20)
---page <n>                   Page number
---quiet                      Output IDs only (one per line)
---verbose                    Show HTTP request/response details
---no-color                   Disable ANSI colors
---env <path>                 Path to custom .env file
---serialize                  Convert HTML content to block HTML before sending
---markdown                   Convert Markdown content to block HTML before sending
---no-h1                      Strip first H1 (use with --serialize or --markdown)
+--profile <name>, -p <name>  Use a named profile from wpklx.config.yaml
+@<name>                      Shorthand for --profile (e.g., @staging)
+```
+
+If omitted, the default profile is used (set via `wpklx config default`).
+Note: `@name` and `--profile` cannot be used together — use one or the other.
+
+### Output flags
+
+```
+--format <table|json|yaml>   Output format (default: table). Use json for scripting, yaml for readability, table for humans.
+--fields <list|all>          Comma-separated fields to include in output. Use "all" to show every field returned by the API.
+--quiet                      Suppress all output except resource IDs. Useful for scripting: wpklx post list --quiet | xargs -I{} wpklx post rm {}
+--verbose                    Print debug information including HTTP requests, timing, and config resolution.
+--no-color                   Disable ANSI color codes in output.
+```
+
+### Pagination flags
+
+```
+--per-page <n>               Number of results per page (default: 20, max depends on site)
+--page <n>                   Page number to retrieve (default: 1)
+```
+
+### Content transformation flags (for create/update actions)
+
+```
+--serialize                  Convert --content value from raw HTML to WordPress block HTML before sending. Requires --content.
+--markdown                   Convert --content value from Markdown to WordPress block HTML before sending. Requires --content.
+--no-h1                      Strip the first <h1> from converted content. Use with --serialize or --markdown.
+```
+
+Note: `--serialize` and `--markdown` are mutually exclusive.
+
+### Other flags
+
+```
+--env <path>                 Load a custom .env file instead of the default .env in cwd.
 --help, -h                   Show help
 --version, -v                Show version
 ```
@@ -207,11 +236,19 @@ wpklx post list --quiet
 
 ## Profiles
 
-Switch between WordPress sites using `@name`:
+Switch between WordPress sites using `--profile`, `-p`, or `@name`:
 
 ```bash
+# All three forms are equivalent:
+wpklx --profile production post list
+wpklx -p production post list
 wpklx @production post list
-wpklx @staging post create --title "Test"
+
+# --profile / -p can appear anywhere in the command:
+wpklx post list --profile staging --format json
+wpklx post create -p staging --title "Test"
+
+# More examples:
 wpklx @local page ls --status draft
 wpklx post list                          # Uses the default profile
 ```
@@ -220,23 +257,27 @@ Profiles are defined in `wpklx.config.yaml` (local) or `~/.config/wpklx/config.y
 
 Config resolution order: CLI flags > .env file > active YAML profile > built-in defaults.
 
+Environment variables: `WP_HOST`, `WP_USERNAME`, `WP_APPLICATION_PASSWORD`, `WP_API_PREFIX`, `WP_PER_PAGE`, `WP_TIMEOUT`, `WP_VERIFY_SSL`, `WP_OUTPUT_FORMAT`.
+
 ## Error handling
 
 wpklx retries transient failures (network errors, 429, 502, 503, 504) with exponential backoff. It does not retry auth or validation errors.
 
 When a resource or action is not found, wpklx suggests similar commands using fuzzy matching.
 
+All error messages include what went wrong, why, and remediation steps. For example, authentication errors suggest checking credentials and regenerating application passwords, network errors differentiate between timeout/DNS/SSL/connection-refused with targeted fixes, and validation errors list each invalid field with its constraint.
+
 ### Exit codes
 
-| Code | Meaning              |
-|------|----------------------|
-| 0    | Success              |
-| 1    | General error        |
-| 2    | Configuration error  |
-| 3    | Authentication error |
-| 4    | Resource not found   |
-| 5    | Validation error     |
-| 6    | Network/timeout      |
+| Code | Meaning              | Common causes and fixes |
+|------|----------------------|------------------------|
+| 0    | Success              | — |
+| 1    | General error        | Unexpected API response |
+| 2    | Configuration error  | Missing profile, bad YAML, missing required fields. Fix: `wpklx config show` or `wpklx login` |
+| 3    | Authentication error | Wrong credentials, expired application password. Fix: regenerate at WP Admin → Users → Profile → Application Passwords |
+| 4    | Resource not found   | Unknown resource or missing item. Fix: `wpklx routes` to check available resources |
+| 5    | Validation error     | Missing required fields, invalid values. Fix: `wpklx <resource> help` to see accepted parameters |
+| 6    | Network/timeout      | Timeout, DNS failure, SSL error, connection refused. Fix: check URL with `wpklx config show` |
 
 ## Best practices
 
@@ -279,12 +320,12 @@ wpklx post update 42 --featured_media "$MEDIA_ID"
 ### Mirror posts from production to staging
 
 ```bash
-wpklx @production post list --format json --fields=title,content,status,categories \
+wpklx --profile production post list --format json --fields=title,content,status,categories \
   | jq -c '.[]' \
   | while read -r post; do
       title=$(echo "$post" | jq -r '.title.rendered // .title')
       content=$(echo "$post" | jq -r '.content.rendered // .content')
-      echo "$content" | wpklx @staging post create --title "$title" --content - --status draft
+      echo "$content" | wpklx -p staging post create --title "$title" --content - --status draft
     done
 ```
 
@@ -328,8 +369,8 @@ wpklx woocommerce:product list --on_sale true --fields=id,name,price,sale_price 
 ### Multi-site content audit: compare post counts across profiles
 
 ```bash
-echo "Production: $(wpklx @production post list --quiet --per-page 1 2>/dev/null | wc -l) posts"
-echo "Staging:    $(wpklx @staging post list --quiet --per-page 1 2>/dev/null | wc -l) posts"
+echo "Production: $(wpklx -p production post list --quiet --per-page 1 2>/dev/null | wc -l) posts"
+echo "Staging:    $(wpklx -p staging post list --quiet --per-page 1 2>/dev/null | wc -l) posts"
 ```
 
 ### Upload multiple images from a directory
@@ -361,7 +402,7 @@ The \`/v1/legacy\` endpoint has been removed. Migrate to \`/v2/modern\` before u
 ### Chain discovery with route inspection for a new site
 
 ```bash
-wpklx @newsite discover && wpklx @newsite routes
+wpklx --profile newsite discover && wpklx --profile newsite routes
 ```
 
 ### Conditional update: only publish if post exists
