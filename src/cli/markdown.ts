@@ -60,7 +60,10 @@ export async function runMarkdown(rawArgs: string[]): Promise<void> {
     }
 
     if (!existsSync(opts.file)) {
-      process.stderr.write(`Error: File not found: ${opts.file}\n`);
+      process.stderr.write(
+        `Error: File not found: ${opts.file}\n\n` +
+          `Check that the file path is correct and the file exists.\n`,
+      );
       await safeExit(1);
     }
 
@@ -71,13 +74,20 @@ export async function runMarkdown(rawArgs: string[]): Promise<void> {
     md = text;
   } else {
     process.stderr.write(
-      "Error: No input provided. Use --file <path> or pipe Markdown via stdin.\n",
+      `Error: No input provided.\n\n` +
+        `Usage:\n` +
+        `  wpklx markdown --file article.md                      Read from file\n` +
+        `  wpklx markdown --file article.md --output blocks.html Read from file, write to file\n` +
+        `  cat README.md | wpklx markdown                        Read from stdin\n` +
+        `  cat README.md | wpklx markdown --no-h1                Strip first H1 heading\n`,
     );
     await safeExit(1);
   }
 
   if (!md.trim()) {
-    process.stderr.write("Error: Input is empty\n");
+    process.stderr.write(
+      `Error: Input is empty. The file or stdin contained no content.\n`,
+    );
     await safeExit(1);
   }
 

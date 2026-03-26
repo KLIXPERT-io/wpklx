@@ -38,7 +38,9 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
     // Reject stdin on read-only actions
     if (READ_ONLY_ACTIONS.has(parsed.action)) {
       throw new CliError(
-        `Stdin input is not supported for '${parsed.action}' action`,
+        `Stdin input is not supported for '${parsed.action}' action.\n\n` +
+          `The '${parsed.action}' action is read-only and does not accept piped input.\n` +
+          `Stdin is supported for: create, update`,
         ExitCode.VALIDATION,
       );
     }
@@ -46,7 +48,10 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
     // Explicit --flag - was used
     if (process.stdin.isTTY) {
       throw new CliError(
-        `--${parsed.stdinFlag} - expects piped input but stdin is a terminal`,
+        `--${parsed.stdinFlag} - expects piped input, but stdin is a terminal (not a pipe).\n\n` +
+          `Usage:\n` +
+          `  echo "content" | wpklx ${parsed.resource} ${parsed.action} --${parsed.stdinFlag} -\n` +
+          `  cat file.txt | wpklx ${parsed.resource} ${parsed.action} --${parsed.stdinFlag} -`,
         ExitCode.VALIDATION,
       );
     }
@@ -55,7 +60,8 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
 
     if (data.length === 0) {
       throw new CliError(
-        "Stdin is empty — no data to read",
+        `Stdin is empty — no data was received from the pipe.\n\n` +
+          `Make sure the command before the pipe produces output.`,
         ExitCode.VALIDATION,
       );
     }

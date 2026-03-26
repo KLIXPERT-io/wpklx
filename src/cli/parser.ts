@@ -38,26 +38,97 @@ const GLOBAL_FLAG_NAMES = new Set([
   "--no-auto-update",
   "--revision",
   "--rev",
+  "--profile",
+  "-p",
 ]);
 
 /**
- * Detects @name token anywhere in args, extracts the profile name,
+ * Extracts --profile / -p flag value from args, returning the value and remaining args.
+ * Returns null if neither flag is present.
+ */
+function extractProfileFlag(args: string[]): { flagProfileName: string | null; remainingArgs: string[] } {
+  const remainingArgs: string[] = [];
+  let flagProfileName: string | null = null;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+
+    if (arg === "--profile" || arg === "-p") {
+      const nextArg = args[i + 1];
+      if (!nextArg || nextArg.startsWith("-")) {
+        // Will be caught later with a helpful error listing available profiles
+        const yamlConfig = loadYamlConfig();
+        const available = yamlConfig
+          ? Object.keys(yamlConfig.profiles).join(", ")
+          : "none (no config file found)";
+        throw new CliError(
+          `--profile requires a profile name.\n\nAvailable profiles: ${available}\n\nTo add a profile, run: wpklx login`,
+          ExitCode.VALIDATION,
+        );
+      }
+      flagProfileName = nextArg;
+      i++; // skip the value
+      continue;
+    }
+
+    // Handle --profile=value
+    if (arg.startsWith("--profile=")) {
+      flagProfileName = arg.slice("--profile=".length);
+      if (!flagProfileName) {
+        const yamlConfig = loadYamlConfig();
+        const available = yamlConfig
+          ? Object.keys(yamlConfig.profiles).join(", ")
+          : "none (no config file found)";
+        throw new CliError(
+          `--profile requires a profile name.\n\nAvailable profiles: ${available}\n\nTo add a profile, run: wpklx login`,
+          ExitCode.VALIDATION,
+        );
+      }
+      continue;
+    }
+
+    remainingArgs.push(arg);
+  }
+
+  return { flagProfileName, remainingArgs };
+}
+
+/**
+ * Detects @name token and/or --profile/-p flag anywhere in args, extracts the profile name,
  * and returns remaining args with the token removed.
+ *
+ * If both @name and --profile are present, throws an error.
  */
 export function extractProfile(args: string[]): ProfileResult {
-  const profileArg = args.find((arg) => arg.startsWith("@"));
-  const remainingArgs = profileArg
-    ? args.filter((arg) => arg !== profileArg)
-    : args;
-  const profileName = profileArg ? profileArg.slice(1) : null;
+  // First extract --profile / -p flag
+  const { flagProfileName, remainingArgs: argsWithoutFlag } = extractProfileFlag(args);
+
+  // Then extract @name token
+  const atArg = argsWithoutFlag.find((arg) => arg.startsWith("@"));
+  const remainingArgs = atArg
+    ? argsWithoutFlag.filter((arg) => arg !== atArg)
+    : argsWithoutFlag;
+  const atProfileName = atArg ? atArg.slice(1) : null;
+
+  // Conflict detection: both @name and --profile specified
+  if (atProfileName && flagProfileName) {
+    throw new CliError(
+      `Profile specified twice: @${atProfileName} and --profile ${flagProfileName}. Use one or the other.`,
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const profileName = flagProfileName ?? atProfileName;
 
   if (profileName) {
-    // @name was specified — must have YAML config
     const yamlConfig = loadYamlConfig();
     if (!yamlConfig) {
       throw new ConfigError(
-        `Profile '@${profileName}' requested but no config file found. ` +
-          `Create wpklx.config.yaml in your project or ~/.config/wpklx/config.yaml`,
+        `Profile '${profileName}' requested but no config file found.\n\n` +
+          `To fix:\n` +
+          `  1. Run wpklx login to create a profile interactively\n` +
+          `  2. Or create wpklx.config.yaml in your project directory\n` +
+          `  3. Or create ~/.config/wpklx/config.yaml for global use`,
       );
     }
 
@@ -65,7 +136,7 @@ export function extractProfile(args: string[]): ProfileResult {
     return { profileName, profile, remainingArgs };
   }
 
-  // No @name — try to use default profile from YAML, or fall back to .env
+  // No profile specified — try to use default profile from YAML, or fall back to .env
   const yamlConfig = loadYamlConfig();
   if (yamlConfig?.default) {
     const profile = resolveProfile(yamlConfig);
@@ -103,20 +174,22 @@ export function parseArgs(args: string[]): ParsedArgs {
     const arg = normalizedArgs[i]!;
 
     if (GLOBAL_FLAG_NAMES.has(arg)) {
-      const flagName = arg.slice(2).replace(/-/g, "_");
+      // Normalize -p to --profile for consistent handling
+      const normalizedFlag = arg === "-p" ? "--profile" : arg;
+      const flagName = normalizedFlag.slice(2).replace(/-/g, "_");
 
       // Boolean global flags
       if (
-        arg === "--quiet" ||
-        arg === "--verbose" ||
-        arg === "--no-color" ||
-        arg === "--help" ||
-        arg === "--version" ||
-        arg === "--serialize" ||
-        arg === "--markdown" ||
-        arg === "--no-h1" ||
-        arg === "--no-auto-update" ||
-        arg === "--revision"
+        normalizedFlag === "--quiet" ||
+        normalizedFlag === "--verbose" ||
+        normalizedFlag === "--no-color" ||
+        normalizedFlag === "--help" ||
+        normalizedFlag === "--version" ||
+        normalizedFlag === "--serialize" ||
+        normalizedFlag === "--markdown" ||
+        normalizedFlag === "--no-h1" ||
+        normalizedFlag === "--no-auto-update" ||
+        normalizedFlag === "--revision"
       ) {
         (globalFlags as Record<string, boolean>)[flagName] = true;
         i++;
@@ -126,7 +199,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       // Value global flags
       const nextArg = normalizedArgs[i + 1];
       if (nextArg !== undefined && !nextArg.startsWith("--")) {
-        if (arg === "--per-page" || arg === "--page" || arg === "--rev") {
+        if (normalizedFlag === "--per-page" || normalizedFlag === "--page" || normalizedFlag === "--rev") {
           (globalFlags as Record<string, number>)[flagName] = parseInt(
             nextArg,
             10,

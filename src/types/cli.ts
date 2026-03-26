@@ -16,6 +16,7 @@ export interface GlobalFlags {
   no_auto_update?: boolean;
   revision?: boolean;
   rev?: number;
+  profile?: string;
 }
 
 /** Parsed CLI arguments after argument processing */

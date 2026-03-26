@@ -118,7 +118,10 @@ async function applySerializeFlag(
   const content = options["content"];
   if (content === undefined || content === true || content === "") {
     throw new CliError(
-      "--serialize requires --content to be provided with a value",
+      `--serialize requires --content to be provided with HTML content.\n\n` +
+        `Usage:\n` +
+        `  wpklx ${parsed.resource} ${parsed.action} --content "<p>Hello</p>" --serialize\n` +
+        `  wpklx ${parsed.resource} ${parsed.action} --content "$(cat page.html)" --serialize`,
       ExitCode.VALIDATION,
     );
   }
@@ -144,7 +147,9 @@ async function applyMarkdownFlag(
   // Mutual exclusivity check
   if (parsed.globalFlags.serialize) {
     throw new CliError(
-      "--serialize and --markdown are mutually exclusive. Use one or the other.",
+      `--serialize and --markdown are mutually exclusive. Use one or the other.\n\n` +
+        `  --serialize: converts raw HTML to WordPress block HTML\n` +
+        `  --markdown: converts Markdown to WordPress block HTML`,
       ExitCode.VALIDATION,
     );
   }
@@ -156,7 +161,10 @@ async function applyMarkdownFlag(
   const content = options["content"];
   if (content === undefined || content === true || content === "") {
     throw new CliError(
-      "--markdown requires --content to be provided with a value",
+      `--markdown requires --content to be provided with Markdown content.\n\n` +
+        `Usage:\n` +
+        `  wpklx ${parsed.resource} ${parsed.action} --content "## Hello" --markdown\n` +
+        `  wpklx ${parsed.resource} ${parsed.action} --content "$(cat article.md)" --markdown`,
       ExitCode.VALIDATION,
     );
   }
@@ -221,7 +229,10 @@ export async function executeCommand(
   if (!actionMeta) {
     const available = Object.keys(resourceCommands).join(", ");
     throw new CliError(
-      `Unknown action '${parsed.action}' for resource '${parsed.resource}'. Available: ${available}`,
+      `Unknown action '${parsed.action}' for resource '${parsed.resource}'.\n\n` +
+        `Available actions: ${available}\n\n` +
+        `Action shortcuts: ls→list, show→get, new→create, edit→update, rm→delete\n` +
+        `For full details: wpklx ${parsed.resource} help`,
       ExitCode.NOT_FOUND,
     );
   }
@@ -275,7 +286,10 @@ export async function executeCommand(
     case "get": {
       if (!parsed.id) {
         throw new CliError(
-          `'get' requires an ID. Usage: wpklx ${parsed.resource} get <id>`,
+          `'get' requires an ID. Pass the ID as a positional argument or use --id.\n\n` +
+            `Usage:\n` +
+            `  wpklx ${parsed.resource} get <id>\n` +
+            `  wpklx ${parsed.resource} show <id> --fields all`,
           ExitCode.VALIDATION,
         );
       }
@@ -319,7 +333,10 @@ export async function executeCommand(
     case "update": {
       if (!parsed.id) {
         throw new CliError(
-          `'update' requires an ID. Usage: wpklx ${parsed.resource} update <id> --field value`,
+          `'update' requires an ID. Pass the ID as a positional argument or use --id.\n\n` +
+            `Usage:\n` +
+            `  wpklx ${parsed.resource} update <id> --field value\n` +
+            `  wpklx ${parsed.resource} edit <id> --title "New Title"`,
           ExitCode.VALIDATION,
         );
       }
@@ -349,7 +366,10 @@ export async function executeCommand(
     case "delete": {
       if (!parsed.id) {
         throw new CliError(
-          `'delete' requires an ID. Usage: wpklx ${parsed.resource} delete <id>`,
+          `'delete' requires an ID. Pass the ID as a positional argument or use --id.\n\n` +
+            `Usage:\n` +
+            `  wpklx ${parsed.resource} delete <id>\n` +
+            `  wpklx ${parsed.resource} rm <id> --force true`,
           ExitCode.VALIDATION,
         );
       }
@@ -379,7 +399,10 @@ export async function executeCommand(
 
     default:
       throw new CliError(
-        `Unknown action '${parsed.action}'. Use list, get, create, update, or delete.`,
+        `Unknown action '${parsed.action}' for resource '${parsed.resource}'.\n\n` +
+          `Available actions: list, get, create, update, delete\n` +
+          `Action shortcuts: ls→list, show→get, new→create, edit→update, rm→delete\n\n` +
+          `For full details: wpklx ${parsed.resource} help`,
         ExitCode.VALIDATION,
       );
   }
@@ -580,7 +603,12 @@ async function handleMediaUpload(
 
   if (!fileOpt || typeof fileOpt !== "string") {
     throw new CliError(
-      "Media upload requires --file <path>. Usage: wpklx media upload --file ./photo.jpg",
+      `Media upload requires --file <path>.\n\n` +
+        `Usage:\n` +
+        `  wpklx media upload --file ./photo.jpg\n` +
+        `  wpklx media upload --file ./hero.jpg --title "Hero" --alt-text "Hero image"\n` +
+        `  cat photo.jpg | wpklx media upload --file - --title "Piped Photo"\n\n` +
+        `Supported formats: jpg, png, gif, webp, svg, pdf, mp4, mp3, wav`,
       ExitCode.VALIDATION,
     );
   }
@@ -627,8 +655,14 @@ export async function runConfig(parsed: ParsedArgs): Promise<void> {
       await configDefault(parsed);
       break;
     default:
-      console.log(`Unknown config subcommand: ${subcommand}`);
-      console.log(`Available: ls, show, path, add, rm, default`);
+      console.log(`Unknown config subcommand: ${subcommand}\n`);
+      console.log(`Available subcommands:`);
+      console.log(`  ls       List all configured profiles`);
+      console.log(`  show     Show resolved settings for a profile`);
+      console.log(`  path     Print the path to the config file in use`);
+      console.log(`  add      Add a new profile interactively`);
+      console.log(`  rm       Remove a profile`);
+      console.log(`  default  Set the default profile`);
       await safeExit(1);
   }
 }
