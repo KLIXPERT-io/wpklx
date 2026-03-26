@@ -1,4 +1,4 @@
-import type { EnvConfig } from "../types/config.ts";
+import type { EnvConfig, AutoUpdateMode } from "../types/config.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ const ENV_KEYS = [
   "WP_TIMEOUT",
   "WP_VERIFY_SSL",
   "WP_OUTPUT_FORMAT",
+  "WP_AUTO_UPDATE",
 ] as const;
 
 /** Parse .env file and return typed config. */
@@ -78,6 +79,12 @@ function mapToConfig(vars: Record<string, string>): EnvConfig {
     config.verify_ssl = vars["WP_VERIFY_SSL"].toLowerCase() !== "false";
   if (vars["WP_OUTPUT_FORMAT"])
     config.output_format = vars["WP_OUTPUT_FORMAT"];
+  if (vars["WP_AUTO_UPDATE"]) {
+    const val = vars["WP_AUTO_UPDATE"].toLowerCase();
+    if (val === "auto" || val === "notify" || val === "off") {
+      config.auto_update = val as AutoUpdateMode;
+    }
+  }
 
   return config;
 }

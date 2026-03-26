@@ -11,6 +11,7 @@ const DEFAULTS: Omit<
   timeout: 30000,
   verify_ssl: true,
   output_format: "table",
+  auto_update: "auto",
 };
 
 /**
@@ -67,6 +68,10 @@ export function resolveConfig(opts: {
       yamlProfile?.output_format ??
       DEFAULTS.output_format,
     cache_ttl: yamlProfile?.cache_ttl,
+    auto_update:
+      envConfig.auto_update ??
+      yamlProfile?.auto_update ??
+      DEFAULTS.auto_update,
   };
 
   if (profileName) {

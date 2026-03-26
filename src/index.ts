@@ -14,11 +14,14 @@ import { runLogin } from "./cli/login.ts";
 import { runSerialize } from "./cli/serialize.ts";
 import { runMarkdown } from "./cli/markdown.ts";
 import { safeExit } from "./helpers/exit.ts";
+import { handleUpdateOnStartup, scheduleBackgroundCheck } from "./update/lifecycle.ts";
+import { runUpdate } from "./update/command.ts";
 
 const version: string = pkg.version;
 
 async function main(): Promise<void> {
   const rawArgs = process.argv.slice(2);
+  const noAutoUpdate = rawArgs.includes("--no-auto-update");
 
   // Handle version early (before config resolution)
   if (
@@ -46,6 +49,12 @@ async function main(): Promise<void> {
     }
   }
 
+  // Handle update command early (no config needed)
+  if (rawArgs[0] === "update") {
+    await runUpdate(version);
+    await safeExit(0);
+  }
+
   // Handle login early (before config resolution — no config needed)
   if (rawArgs[0] === "login") {
     await runLogin();
@@ -62,6 +71,11 @@ async function main(): Promise<void> {
   if (rawArgs[0] === "markdown") {
     await runMarkdown(rawArgs.slice(1));
     await safeExit(0);
+  }
+
+  // Step 1: Check for pending updates (non-blocking, reads state file)
+  if (!noAutoUpdate) {
+    await handleUpdateOnStartup(version);
   }
 
   // Extract @profile and parse arguments
@@ -82,12 +96,18 @@ async function main(): Promise<void> {
   // Load env config
   const envConfig = loadEnvConfig(parsed.globalFlags.env);
 
+  // Resolve auto_update mode from config chain (for background check decision)
+  const autoUpdateMode = noAutoUpdate
+    ? "off" as const
+    : envConfig.auto_update ?? "auto";
+
   // Handle global help (no resource or explicit help command)
   if (
     (parsed.globalFlags.help && !parsed.resource) ||
     parsed.resource === "help"
   ) {
     showGlobalHelp(version);
+    scheduleBackgroundCheck(version, autoUpdateMode);
     await safeExit(0);
   }
 
@@ -108,6 +128,7 @@ async function main(): Promise<void> {
       console.log(`Help for '${parsed.resource}' requires a configured WordPress site.`);
       console.log(`Run 'wpklx config add <name>' to set up a profile first.`);
     }
+    scheduleBackgroundCheck(version, autoUpdateMode);
     await safeExit(0);
   }
 
@@ -122,11 +143,13 @@ async function main(): Promise<void> {
 
     if (parsed.resource === "discover") {
       await runDiscover(config);
+      scheduleBackgroundCheck(version, config.auto_update);
       await safeExit(0);
     }
 
     if (parsed.resource === "routes") {
       await runRoutes(config, parsed);
+      scheduleBackgroundCheck(version, config.auto_update);
       await safeExit(0);
     }
   }
@@ -134,6 +157,7 @@ async function main(): Promise<void> {
   // Config commands don't need API credentials
   if (parsed.resource === "config") {
     await runConfig(parsed);
+    scheduleBackgroundCheck(version, autoUpdateMode);
     await safeExit(0);
   }
 
@@ -153,6 +177,9 @@ async function main(): Promise<void> {
 
   // Execute dynamic resource command
   await executeCommand(config, parsed);
+
+  // Step 3: Fire-and-forget background check after command execution
+  scheduleBackgroundCheck(version, config.auto_update);
 }
 
 main().catch(handleError);
