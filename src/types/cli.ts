@@ -13,6 +13,7 @@ export interface GlobalFlags {
   serialize?: boolean;
   markdown?: boolean;
   no_h1?: boolean;
+  no_auto_update?: boolean;
 }
 
 /** Parsed CLI arguments after argument processing */
