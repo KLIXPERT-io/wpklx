@@ -37,6 +37,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Default
 wpklx.config*
 
+# Emdash
+.emdash.json
+
 # Ralph
 .ralph
 progress.txt
