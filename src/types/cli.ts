@@ -14,6 +14,8 @@ export interface GlobalFlags {
   markdown?: boolean;
   no_h1?: boolean;
   no_auto_update?: boolean;
+  revision?: boolean;
+  rev?: number;
 }
 
 /** Parsed CLI arguments after argument processing */

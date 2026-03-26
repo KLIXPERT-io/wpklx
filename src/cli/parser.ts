@@ -36,6 +36,8 @@ const GLOBAL_FLAG_NAMES = new Set([
   "--markdown",
   "--no-h1",
   "--no-auto-update",
+  "--revision",
+  "--rev",
 ]);
 
 /**
@@ -113,7 +115,8 @@ export function parseArgs(args: string[]): ParsedArgs {
         arg === "--serialize" ||
         arg === "--markdown" ||
         arg === "--no-h1" ||
-        arg === "--no-auto-update"
+        arg === "--no-auto-update" ||
+        arg === "--revision"
       ) {
         (globalFlags as Record<string, boolean>)[flagName] = true;
         i++;
@@ -123,7 +126,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       // Value global flags
       const nextArg = normalizedArgs[i + 1];
       if (nextArg !== undefined && !nextArg.startsWith("--")) {
-        if (arg === "--per-page" || arg === "--page") {
+        if (arg === "--per-page" || arg === "--page" || arg === "--rev") {
           (globalFlags as Record<string, number>)[flagName] = parseInt(
             nextArg,
             10,

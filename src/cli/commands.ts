@@ -24,6 +24,7 @@ import { CliError, ExitCode } from "../helpers/error.ts";
 import { safeExit } from "../helpers/exit.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
 import { markdownToHtml } from "../vendor/mmd.ts";
+import { saveRevision, listRevisions, loadRevision } from "../helpers/revisions.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -172,6 +173,16 @@ export async function executeCommand(
   config: ResolvedConfig,
   parsed: ParsedArgs,
 ): Promise<void> {
+  // Special case: local revision commands
+  if (parsed.action === "revisions") {
+    await handleRevisionsList(config, parsed);
+    return;
+  }
+  if (parsed.action === "restore") {
+    await handleRestore(config, parsed);
+    return;
+  }
+
   // Special case: media upload
   if (parsed.resource === "media" && parsed.action === "upload") {
     await handleMediaUpload(config, parsed);
@@ -312,6 +323,10 @@ export async function executeCommand(
           ExitCode.VALIDATION,
         );
       }
+      if (parsed.globalFlags.revision) {
+        const snapshot = await client.get(apiPath, { context: "edit" });
+        saveRevision(config.profile_name, config.host, parsed.resource, parsed.id, snapshot.data);
+      }
       await applySerializeFlag(options, parsed);
       await applyMarkdownFlag(options, parsed);
       const body: Record<string, unknown> = {};
@@ -337,6 +352,10 @@ export async function executeCommand(
           `'delete' requires an ID. Usage: wpklx ${parsed.resource} delete <id>`,
           ExitCode.VALIDATION,
         );
+      }
+      if (parsed.globalFlags.revision) {
+        const snapshot = await client.get(apiPath, { context: "edit" });
+        saveRevision(config.profile_name, config.host, parsed.resource, parsed.id, snapshot.data);
       }
       const params: Record<string, string> = {};
       if (options["force"]) {
@@ -364,6 +383,137 @@ export async function executeCommand(
         ExitCode.VALIDATION,
       );
   }
+}
+
+/** List local revisions for a resource ID. */
+async function handleRevisionsList(
+  config: ResolvedConfig,
+  parsed: ParsedArgs,
+): Promise<void> {
+  if (!parsed.id) {
+    throw new CliError(
+      `'revisions' requires an ID. Usage: wpklx ${parsed.resource} revisions <id>`,
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const revisions = listRevisions(
+    config.profile_name,
+    config.host,
+    parsed.resource,
+    parsed.id,
+  );
+
+  if (revisions.length === 0) {
+    console.log(`No revisions found for ${parsed.resource} ${parsed.id}.`);
+    return;
+  }
+
+  const rows = revisions.map((r) => ({
+    Rev: r.index,
+    Timestamp: r.timestamp,
+  }));
+
+  const output = formatOutput(
+    rows,
+    parsed.globalFlags.format ?? config.output_format,
+    {
+      fields: parsed.globalFlags.fields,
+      quiet: parsed.globalFlags.quiet,
+    },
+  );
+  console.log(output);
+}
+
+/** Restore a local revision snapshot by pushing it back via the API. */
+async function handleRestore(
+  config: ResolvedConfig,
+  parsed: ParsedArgs,
+): Promise<void> {
+  if (!parsed.id) {
+    throw new CliError(
+      `'restore' requires an ID. Usage: wpklx ${parsed.resource} restore <id> [--rev N]`,
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const rev = parsed.globalFlags.rev ?? 1;
+  const data = loadRevision(
+    config.profile_name,
+    config.host,
+    parsed.resource,
+    parsed.id,
+    rev,
+  );
+
+  if (!data) {
+    const revisions = listRevisions(
+      config.profile_name,
+      config.host,
+      parsed.resource,
+      parsed.id,
+    );
+    if (revisions.length === 0) {
+      throw new CliError(
+        `No revisions found for ${parsed.resource} ${parsed.id}.`,
+        ExitCode.NOT_FOUND,
+      );
+    }
+    throw new CliError(
+      `Revision ${rev} not found. Available: 1-${revisions.length}.`,
+      ExitCode.NOT_FOUND,
+    );
+  }
+
+  // Discover schema to find the update route for this resource
+  const schema = await getRawSchema(config);
+  let namespaceFilter: string | undefined;
+  if (parsed.namespacePrefix) {
+    namespaceFilter = resolveNamespacePrefix(schema.namespaces, parsed.namespacePrefix) ?? undefined;
+  }
+  const commands = mapRoutesToCommands(schema, namespaceFilter);
+  const resourceCommands = commands[parsed.resource];
+
+  if (!resourceCommands?.["update"]) {
+    throw new CliError(
+      `Resource '${parsed.resource}' does not support update — cannot restore.`,
+      ExitCode.VALIDATION,
+    );
+  }
+
+  const updateMeta = resourceCommands["update"];
+  let apiPath = updateMeta.path.replace(/\/\(\?P<id>[^)]+\)/, `/${parsed.id}`);
+  apiPath = apiPath.replace(/\/\(\?P<[^>]+>[^)]+\)/g, "");
+
+  // Filter the snapshot to only include fields accepted by the update endpoint
+  const allowedParams = new Set(updateMeta.params.map((p) => p.name));
+  const body: Record<string, unknown> = {};
+  const snapshot = data as Record<string, unknown>;
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (allowedParams.has(key)) {
+      // For rendered fields (e.g., title.rendered), extract the raw value
+      if (value && typeof value === "object" && "raw" in (value as Record<string, unknown>)) {
+        body[key] = (value as Record<string, unknown>)["raw"];
+      } else if (value && typeof value === "object" && "rendered" in (value as Record<string, unknown>)) {
+        body[key] = (value as Record<string, unknown>)["rendered"];
+      } else {
+        body[key] = value;
+      }
+    }
+  }
+
+  const client = new WpClient(config);
+  const response = await client.patch(apiPath, body);
+
+  const output = formatOutput(
+    response.data,
+    parsed.globalFlags.format ?? config.output_format,
+    {
+      fields: parsed.globalFlags.fields,
+      quiet: parsed.globalFlags.quiet,
+    },
+  );
+  console.log(output);
 }
 
 /** Infer MIME type from a filename extension */
