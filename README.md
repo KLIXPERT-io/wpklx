@@ -4,6 +4,96 @@ A dynamic, fault-tolerant command-line interface for the WordPress REST API, bui
 
 KLX discovers available routes from your WordPress site's REST API at runtime and generates CLI commands automatically — no hardcoded endpoints, no manual updates when plugins add new routes.
 
+Whether you manage a single blog or dozens of client sites, KLX gives you a fast, scriptable WordPress CLI (wp cli alternative) that works with any WordPress installation — including headless setups, multisite networks, and sites extended by WooCommerce, WPML, ACF, or any plugin that registers REST API routes. No SSH access or server-side tooling required — KLX talks directly to the WordPress REST API over HTTP.
+
+## Features
+
+- **Auto-discovery** — fetches your site's REST API schema and generates commands on the fly; no hardcoded endpoints
+- **Multi-site profiles** — manage unlimited WordPress sites via YAML profiles and switch with `@name` syntax
+- **Full CRUD** — list, get, create, update, and delete any resource with intuitive action shortcuts (`ls`, `show`, `new`, `edit`, `rm`)
+- **Plugin-aware** — automatically picks up routes registered by WooCommerce, WPML, ACF, Yoast, Gravity Forms, and any other plugin
+- **Namespace prefixes** — disambiguate overlapping resource names with `wpml:post`, `woocommerce:product`, etc.
+- **Stdin piping** — pipe content from files, other commands, or markdown into create/update actions
+- **Flexible output** — table, JSON, or YAML output with field filtering (`--fields=id,title,status`) and quiet mode (`--quiet`)
+- **Fault-tolerant** — retries with exponential backoff, clear auth error messages, fuzzy command suggestions for typos
+- **Interactive login** — `wpklx login` walks you through connecting to a site in seconds
+- **Cross-platform** — pre-built binaries for Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64
+- **No server access needed** — works entirely over the REST API using WordPress application passwords
+- **Scriptable** — clean exit codes, `--quiet` mode, and piping support make it ideal for shell scripts and CI/CD pipelines
+
+## Use Cases
+
+### Content Management & Publishing
+
+Bulk-manage posts, pages, and custom post types from the terminal. Draft content in markdown, pipe it into KLX, and publish across multiple sites without ever opening the WordPress admin.
+
+```bash
+# Create a post from a markdown file
+cat article.md | wpklx post create --title "Weekly Roundup" --status draft
+
+# Publish all draft posts on staging
+wpklx @staging post ls --status draft --quiet | xargs -I {} wpklx @staging post update {} --status publish
+```
+
+### Multi-Site Operations
+
+Agencies and freelancers managing multiple client sites can switch between profiles in a single terminal session — no browser tabs, no re-logging in.
+
+```bash
+# Check for pending comments across sites
+wpklx @client-a comment ls --status hold
+wpklx @client-b comment ls --status hold
+
+# Deploy the same page to staging and production
+cat landing.html | wpklx @staging page create --title "Promo" --status publish
+cat landing.html | wpklx @production page create --title "Promo" --status draft
+```
+
+### CI/CD & Automation
+
+Integrate WordPress content updates into your deployment pipeline. Clean exit codes and `--quiet` mode make KLX ideal for shell scripts, GitHub Actions, and cron jobs.
+
+```bash
+# Sync content as part of a deploy script
+wpklx post create --title "$RELEASE_TAG" --content - < changelog.md --status publish
+
+# Verify the site is reachable after deploy
+wpklx @production post ls --per-page 1 --quiet && echo "Site OK"
+```
+
+### WooCommerce & Plugin Management
+
+Any plugin that registers REST API routes is automatically available — manage WooCommerce products, Gravity Forms entries, WPML translations, and more without plugin-specific CLIs.
+
+```bash
+# List WooCommerce products
+wpklx woocommerce:product ls
+
+# Export all form entries as JSON
+wpklx gravityforms:entry ls --format json > entries.json
+```
+
+### Content Migration
+
+Move content between WordPress sites by exporting from one profile and importing to another — all from the command line.
+
+```bash
+# Export posts as JSON and re-import to another site
+wpklx @old-site post ls --format json --fields=all > posts.json
+```
+
+### Quick Lookups & Debugging
+
+Quickly inspect content, check user roles, or debug API responses without navigating the WordPress admin dashboard.
+
+```bash
+# Check who authored a specific post
+wpklx post get 42 --fields=id,title,author
+
+# Debug the raw API response
+wpklx --verbose user ls --per-page 1
+```
+
 ## How It Works
 
 On first run (or with `wpklx discover`), KLX fetches the API schema from your WordPress site's `/wp-json` endpoint. It parses the available routes, methods, and accepted parameters, then maps them to a consistent CLI syntax:
