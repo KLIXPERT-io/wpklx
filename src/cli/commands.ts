@@ -3,7 +3,11 @@ import type { ParsedArgs } from "../types/cli.ts";
 import { discoverSchema } from "../api/discovery.ts";
 import { WpClient } from "../api/client.ts";
 import { loadCachedSchema, saveSchemaCache } from "../api/cache.ts";
-import { mapRoutesToCommands, getResourceNames, resolveNamespacePrefix } from "../api/schema.ts";
+import {
+  mapRoutesToCommands,
+  getResourceNames,
+  resolveNamespacePrefix,
+} from "../api/schema.ts";
 import type { CommandMap } from "../api/schema.ts";
 import type { DiscoveredSchema } from "../types/api.ts";
 import {
@@ -24,7 +28,11 @@ import { CliError, ExitCode } from "../helpers/error.ts";
 import { safeExit } from "../helpers/exit.ts";
 import { serializeToBlocks } from "../helpers/wp-serialize.ts";
 import { markdownToHtml } from "../vendor/mmd.ts";
-import { saveRevision, listRevisions, loadRevision } from "../helpers/revisions.ts";
+import {
+  saveRevision,
+  listRevisions,
+  loadRevision,
+} from "../helpers/revisions.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -36,7 +44,9 @@ export async function runDiscover(config: ResolvedConfig): Promise<void> {
   const commands = mapRoutesToCommands(schema);
   const resources = getResourceNames(commands);
 
-  logger.info(`Discovered ${schema.routes.length} routes across ${schema.namespaces.length} namespaces.`);
+  logger.info(
+    `Discovered ${schema.routes.length} routes across ${schema.namespaces.length} namespaces.`,
+  );
   logger.info(`Resources: ${resources.join(", ")}`);
 }
 
@@ -49,13 +59,20 @@ export async function runRoutes(
   const commands = mapRoutesToCommands(schema);
 
   // Build table data with Namespace column
-  const rows: { Resource: string; Action: string; Method: string; Namespace: string; Path: string }[] = [];
+  const rows: {
+    Resource: string;
+    Action: string;
+    Method: string;
+    Namespace: string;
+    Path: string;
+  }[] = [];
 
   for (const [resource, actions] of Object.entries(commands)) {
     for (const [action, meta] of Object.entries(actions)) {
       // Extract namespace from path: "/wp/v2/posts" -> "wp/v2"
       const pathSegments = meta.path.replace(/^\//, "").split("/");
-      const ns = pathSegments.length >= 2 ? `${pathSegments[0]}/${pathSegments[1]}` : "";
+      const ns =
+        pathSegments.length >= 2 ? `${pathSegments[0]}/${pathSegments[1]}` : "";
       rows.push({
         Resource: resource,
         Action: action,
@@ -67,12 +84,19 @@ export async function runRoutes(
   }
 
   // Sort by resource then action
-  rows.sort((a, b) => a.Resource.localeCompare(b.Resource) || a.Action.localeCompare(b.Action));
+  rows.sort(
+    (a, b) =>
+      a.Resource.localeCompare(b.Resource) || a.Action.localeCompare(b.Action),
+  );
 
-  const output = formatOutput(rows, parsed.globalFlags.format ?? config.output_format, {
-    fields: parsed.globalFlags.fields,
-    quiet: parsed.globalFlags.quiet,
-  });
+  const output = formatOutput(
+    rows,
+    parsed.globalFlags.format ?? config.output_format,
+    {
+      fields: parsed.globalFlags.fields,
+      quiet: parsed.globalFlags.quiet,
+    },
+  );
   console.log(output);
 }
 
@@ -94,6 +118,23 @@ async function discoverAndCache(config: ResolvedConfig) {
   const schema = await discoverSchema(config);
   saveSchemaCache(config.host, schema);
   return schema;
+}
+
+/** Try to parse a string value as JSON. Returns parsed object/array if valid, original value otherwise. */
+function tryParseJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
 }
 
 /** Strip the first <h1> element from HTML. */
@@ -207,9 +248,7 @@ export async function executeCommand(
       parsed.namespacePrefix,
     );
     if (!resolved) {
-      console.error(
-        `Unknown namespace: ${parsed.namespacePrefix}`,
-      );
+      console.error(`Unknown namespace: ${parsed.namespacePrefix}`);
       suggestSimilar(parsed.namespacePrefix, schema.namespaces);
       await safeExit(ExitCode.NOT_FOUND);
     }
@@ -315,7 +354,7 @@ export async function executeCommand(
       await applyMarkdownFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
-        body[key] = value;
+        body[key] = tryParseJson(value);
       }
       const response = await client.post(apiPath, body);
       const output = formatOutput(
@@ -342,13 +381,19 @@ export async function executeCommand(
       }
       if (parsed.globalFlags.revision) {
         const snapshot = await client.get(apiPath, { context: "edit" });
-        saveRevision(config.profile_name, config.host, parsed.resource, parsed.id, snapshot.data);
+        saveRevision(
+          config.profile_name,
+          config.host,
+          parsed.resource,
+          parsed.id,
+          snapshot.data,
+        );
       }
       await applySerializeFlag(options, parsed);
       await applyMarkdownFlag(options, parsed);
       const body: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
-        body[key] = value;
+        body[key] = tryParseJson(value);
       }
       const response = await client.patch(apiPath, body);
       const output = formatOutput(
@@ -375,7 +420,13 @@ export async function executeCommand(
       }
       if (parsed.globalFlags.revision) {
         const snapshot = await client.get(apiPath, { context: "edit" });
-        saveRevision(config.profile_name, config.host, parsed.resource, parsed.id, snapshot.data);
+        saveRevision(
+          config.profile_name,
+          config.host,
+          parsed.resource,
+          parsed.id,
+          snapshot.data,
+        );
       }
       const params: Record<string, string> = {};
       if (options["force"]) {
@@ -492,7 +543,9 @@ async function handleRestore(
   const schema = await getRawSchema(config);
   let namespaceFilter: string | undefined;
   if (parsed.namespacePrefix) {
-    namespaceFilter = resolveNamespacePrefix(schema.namespaces, parsed.namespacePrefix) ?? undefined;
+    namespaceFilter =
+      resolveNamespacePrefix(schema.namespaces, parsed.namespacePrefix) ??
+      undefined;
   }
   const commands = mapRoutesToCommands(schema, namespaceFilter);
   const resourceCommands = commands[parsed.resource];
@@ -515,9 +568,17 @@ async function handleRestore(
   for (const [key, value] of Object.entries(snapshot)) {
     if (allowedParams.has(key)) {
       // For rendered fields (e.g., title.rendered), extract the raw value
-      if (value && typeof value === "object" && "raw" in (value as Record<string, unknown>)) {
+      if (
+        value &&
+        typeof value === "object" &&
+        "raw" in (value as Record<string, unknown>)
+      ) {
         body[key] = (value as Record<string, unknown>)["raw"];
-      } else if (value && typeof value === "object" && "rendered" in (value as Record<string, unknown>)) {
+      } else if (
+        value &&
+        typeof value === "object" &&
+        "rendered" in (value as Record<string, unknown>)
+      ) {
         body[key] = (value as Record<string, unknown>)["rendered"];
       } else {
         body[key] = value;
@@ -554,7 +615,9 @@ function inferMimeType(filename: string): string {
     mp3: "audio/mpeg",
     wav: "audio/wav",
   };
-  return ext ? mimeMap[ext] ?? "application/octet-stream" : "application/octet-stream";
+  return ext
+    ? (mimeMap[ext] ?? "application/octet-stream")
+    : "application/octet-stream";
 }
 
 /** Handle media upload command. */
@@ -579,8 +642,12 @@ async function handleMediaUpload(
 
   if (fileOpt === "__stdin__" && parsed.stdinData) {
     // Binary stdin upload
-    const filename = (parsed.options["title"] as string) ?? (parsed.options["filename"] as string) ?? "upload";
-    const mimeType = (parsed.options["mime-type"] as string) ?? inferMimeType(filename);
+    const filename =
+      (parsed.options["title"] as string) ??
+      (parsed.options["filename"] as string) ??
+      "upload";
+    const mimeType =
+      (parsed.options["mime-type"] as string) ?? inferMimeType(filename);
     const blob = new Blob([parsed.stdinData], { type: mimeType });
 
     // Ensure title is set for FormData filename

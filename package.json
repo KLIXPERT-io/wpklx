@@ -1,6 +1,6 @@
 {
   "name": "wpklx",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "KLX WordPress CLI — a dynamic, fault-tolerant CLI for the WordPress REST API",
   "type": "module",
   "bin": {
