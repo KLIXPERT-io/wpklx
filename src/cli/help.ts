@@ -164,6 +164,35 @@ Snapshots are stored in \`~/.config/wpklx/revisions/\` (up to 10 per resource, o
 
 Note: only fields accepted by the update endpoint are restored (smart field filtering).
 
+## Edit Workflow (pull / push / diff)
+
+Edit a resource locally like a file, preview the changes, then push only what changed.
+Uses Google's diff-match-patch for readable text diffs.
+
+- \`wpklx <resource> pull <id>\` — Download to \`<resource>-<id>.json\` + a hidden baseline sidecar.
+- \`wpklx <resource> pull <id> --file <path>\` — Custom output path.
+- \`wpklx <resource> diff --file <path>\` — Show local edits (vs baseline).
+- \`wpklx <resource> diff --file <path> --server\` — Also compare baseline to current server state and surface conflicts.
+- \`wpklx <resource> push --file <path>\` — Send only the changed fields. Detects conflicts against the server.
+- \`wpklx <resource> push --file <path> --dry-run\` — Preview diff without sending.
+- \`wpklx <resource> push --file <path> --force\` — Skip conflict check and confirm prompt.
+- \`wpklx <resource> push --file <path> --yes\` — Skip confirm prompt only.
+
+**Example:**
+
+\`\`\`
+wpklx post pull 42                        # writes post-42.json and .post-42.baseline.json
+# edit post-42.json in your editor
+wpklx post diff --file post-42.json       # preview changes
+wpklx post push --file post-42.json       # confirm and push
+\`\`\`
+
+Works for any resource that exposes both get and update (post, page, and most others).
+
+Conflict detection: if a field was edited locally AND on the server since the pull, push aborts unless \`--force\` is passed.
+
+Tip: add \`.*.baseline.json\` to .gitignore if you check in the working files.
+
 ## Environment Flags
 
 - \`--env <path>\` — Load a custom .env file instead of the default .env in cwd.

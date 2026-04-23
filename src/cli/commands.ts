@@ -33,6 +33,7 @@ import {
   listRevisions,
   loadRevision,
 } from "../helpers/revisions.ts";
+import { handlePull, handlePush, handleDiff } from "../helpers/pull-push.ts";
 
 /** Run the discover command — force-fetch schema from the site. */
 export async function runDiscover(config: ResolvedConfig): Promise<void> {
@@ -229,6 +230,20 @@ export async function executeCommand(
   }
   if (parsed.action === "restore") {
     await handleRestore(config, parsed);
+    return;
+  }
+
+  // Pull / push / diff: file-based edit workflow
+  if (parsed.action === "pull") {
+    await handlePull(config, parsed);
+    return;
+  }
+  if (parsed.action === "push") {
+    await handlePush(config, parsed);
+    return;
+  }
+  if (parsed.action === "diff") {
+    await handleDiff(config, parsed);
     return;
   }
 

@@ -330,6 +330,60 @@ Notes:
 - Snapshots are profile-scoped — stored under `~/.config/wpklx/revisions/{profile}/{resource}/{id}/`.
 - `--revision` can be combined with any other flags on update/delete commands.
 
+## Edit workflow (pull / push / diff)
+
+Edit a resource locally like a file, preview the changes, then push only what changed. Uses Google's diff-match-patch under the hood for readable text diffs.
+
+Works for any resource that exposes both `get` and `update` (post, page, and most others).
+
+### Commands
+
+```bash
+wpklx <resource> pull <id>                         # Download to <resource>-<id>.json + hidden baseline sidecar
+wpklx <resource> pull <id> --file <path>           # Custom output path
+wpklx <resource> diff --file <path>                # Show local edits (vs baseline)
+wpklx <resource> diff --file <path> --server       # Also compare baseline to current server; flag conflicts
+wpklx <resource> push --file <path>                # Send only changed fields (with confirm prompt)
+wpklx <resource> push --file <path> --dry-run      # Preview diff without sending
+wpklx <resource> push --file <path> --yes          # Skip confirm prompt
+wpklx <resource> push --file <path> --force        # Skip conflict check AND confirm prompt
+```
+
+### How it works
+
+`pull` writes two files:
+- `<resource>-<id>.json` — user-facing working file (auto-managed fields like timestamps stripped for noise)
+- `.<resource>-<id>.baseline.json` — hidden sidecar holding the full server state at pull time
+
+Both files embed a `_wpklx` metadata block (resource, id, profile, host, pulled_at) so `diff`/`push` resolve the target without extra flags. If the file is edited for a different resource than invoked, push aborts.
+
+`push` diffs the working file against the baseline, sends only the changed fields (filtered to those accepted by the update endpoint), then refreshes the baseline from the server response so subsequent diffs/pushes stay accurate.
+
+### Conflict detection
+
+If a field was edited locally AND on the server since the pull, push aborts with an error listing the conflicted fields. Options:
+
+1. Re-pull to get the latest baseline, redo your edits, and push again.
+2. Pass `--force` to overwrite the server's version.
+
+Use `wpklx <resource> diff --file <path> --server` to preview server drift before pushing.
+
+### Example
+
+```bash
+wpklx post pull 42                        # writes post-42.json and .post-42.baseline.json
+# edit post-42.json in your editor
+wpklx post diff --file post-42.json       # preview changes
+wpklx post push --file post-42.json       # confirm and push
+```
+
+### Notes
+
+- Fields the update endpoint does not accept are skipped (and logged) rather than sent.
+- `pull` uses `context=edit` so content fields come back raw, not rendered.
+- Add `.*.baseline.json` to `.gitignore` if you check in working files.
+- Re-pulling overwrites the baseline — uncommitted edits in the working file can be lost, so commit or stash first.
+
 ## Best practices
 
 - Always run `wpklx discover` after installing or removing WordPress plugins to refresh the route cache.
@@ -341,6 +395,7 @@ Notes:
 - Prefer positional IDs (`wpklx post get 42`) over `--id 42` for brevity.
 - Use `--serialize` or `--markdown` with `--no-h1` when the first heading duplicates the post title.
 - Use `--revision` on update/delete commands to create a safety net. Restore with `wpklx <resource> restore <id>`.
+- For non-trivial edits to existing content, prefer the `pull` → edit → `diff` → `push` workflow over one-shot `update` — it gives a preview, surfaces server-side conflicts, and only sends changed fields.
 
 ## Complex examples
 
@@ -455,6 +510,15 @@ The \`/v1/legacy\` endpoint has been removed. Migrate to \`/v2/modern\` before u
 
 ```bash
 wpklx --profile newsite discover && wpklx --profile newsite routes
+```
+
+### Pull, edit, and push a post safely
+
+```bash
+wpklx post pull 42
+# open post-42.json, tweak title/content/status, save
+wpklx post diff --file post-42.json --server   # preview local edits + any server drift
+wpklx post push --file post-42.json            # sends only changed fields; aborts on conflict
 ```
 
 ### Conditional update: only publish if post exists
