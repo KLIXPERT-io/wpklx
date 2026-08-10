@@ -30,6 +30,9 @@ Application Passwords for authentication (WP Admin → Users → Profile).
 - \`wpklx config add <name>\` — Add a new profile interactively
 - \`wpklx config rm <name>\` — Remove a profile (cannot remove the current default)
 - \`wpklx config default <name>\` — Set the default profile used when no @profile is given
+- \`wpklx ability list\` — List abilities exposed by the site (WordPress 6.9+)
+- \`wpklx ability run <ns>/<name>\` — Execute an ability
+- \`wpklx ability help\` — Show the full Abilities API reference
 - \`wpklx serialize\` — Convert raw HTML to WordPress block-editor HTML
 - \`wpklx markdown\` — Convert Markdown to WordPress block-editor HTML
 - \`wpklx <resource> help\` — Show all actions and parameters for a specific resource
@@ -119,6 +122,31 @@ Example — upload and set metadata:
 
 Example — pipe from another command:
 \`curl -s https://example.com/image.png | wpklx media upload --file - --title "Downloaded"\`
+
+## Abilities API (WordPress 6.9+)
+
+Sites running WordPress 6.9 or the Abilities API plugin expose registered
+"abilities" — machine-readable, executable capabilities under \`wp-abilities/v1\`.
+
+- \`wpklx ability list\` — List abilities (\`--category <slug>\` to filter)
+- \`wpklx ability get <ns>/<name>\` — Show one ability with its input/output schema
+- \`wpklx ability run <ns>/<name>\` — Execute an ability
+- \`wpklx ability categories\` — List ability categories
+- \`wpklx ability category <slug>\` — Show a single category
+
+wpklx picks the HTTP method from the ability's annotations: readonly → GET,
+destructive → DELETE, otherwise POST. Override with \`--method <GET|POST|DELETE>\`.
+
+Pass input as JSON with \`--input\`, or as individual flags:
+
+\`wpklx ability run my-plugin/get-user --input '{"user_id":1}'\`
+\`wpklx ability run my-plugin/get-user --user_id 1\`
+\`cat input.json | wpklx ability run my-plugin/update-option --input -\`
+
+Ability results are printed as JSON by default (they follow an arbitrary
+output_schema). Use \`--format yaml\` or \`--format table\` to change that.
+
+Run \`wpklx ability help\` for the full reference.
 
 ## Serialize & Markdown Standalone Commands
 
@@ -219,6 +247,120 @@ wpklx --profile staging post list --format json List posts on staging as JSON
 wpklx -p staging post list                      Same as above, short form
 wpklx @staging post list                        Same as above, @ shorthand
 \`\`\`
+`;
+
+  console.log(renderMarkdown(help));
+}
+
+/**
+ * Generates and prints help for the Abilities API command surface.
+ */
+export function showAbilitiesHelp(): void {
+  const help = `# ability
+
+Interact with the **WordPress Abilities API** (\`wp-abilities/v1\`, WordPress 6.9+).
+
+Abilities are capabilities that core, plugins and themes register in a
+machine-readable form — each has a name, a category, JSON Schema definitions for
+its input and output, and annotations describing how it behaves.
+
+Unlike other wpklx resources, \`ability\` is not derived from the REST schema:
+the Abilities API uses \`/{namespace}/{ability}\` routes that don't map to CRUD.
+
+## Available Actions
+
+### list (GET) — List abilities exposed via REST
+
+Path: \`/wp-abilities/v1/abilities\`
+
+**Optional Parameters:**
+
+- \`--category\` \`string\` — Filter by category slug
+- \`--per-page\` \`integer\` — Items per page (default 20, max 100)
+- \`--page\` \`integer\` — Page number
+
+**Examples:**
+
+- \`wpklx ability list\`
+- \`wpklx ability ls --category data-retrieval\`
+- \`wpklx ability list --format json --fields all\`
+- \`wpklx ability list --quiet\` — one ability name per line
+
+### get (GET) — Show a single ability, including its schemas
+
+Path: \`/wp-abilities/v1/{namespace}/{ability}\`
+
+**Examples:**
+
+- \`wpklx ability get my-plugin/get-site-info\`
+- \`wpklx ability show my-plugin/get-site-info --format json\`
+
+Output defaults to YAML because an ability is mostly nested JSON Schema.
+
+### run (GET|POST|DELETE) — Execute an ability
+
+Path: \`/wp-abilities/v1/{namespace}/{ability}/run\`
+
+The HTTP method is chosen from the ability's annotations:
+
+- \`readonly: true\` → **GET** (input sent as a URL-encoded \`input\` query param)
+- \`destructive: true\` → **DELETE** (input sent as a query param)
+- otherwise → **POST** (input sent as \`{"input": ...}\` in the JSON body)
+
+wpklx fetches the ability definition first to decide. Pass \`--method\` to skip
+that lookup and force a method.
+
+**Input:**
+
+- \`--input '<json>'\` — Raw JSON matching the ability's input_schema
+- \`--input -\` — Read the JSON from stdin
+- \`--<key> <value>\` — Build the input object from individual flags. Values are
+  coerced: \`true\`/\`false\`/\`null\`, numbers and JSON objects/arrays are parsed,
+  everything else stays a string. Keys are passed through verbatim, so use the
+  exact names from the input schema (e.g. \`--user_id\`, not \`--user-id\`).
+
+**Examples:**
+
+- \`wpklx ability run my-plugin/get-site-info\`
+- \`wpklx ability run my-plugin/get-user --input '{"user_id":1}'\`
+- \`wpklx ability run my-plugin/get-user --user_id 1\`
+- \`wpklx ability run my-plugin/update-option --option_name blogname --option_value "New Title"\`
+- \`cat input.json | wpklx ability run my-plugin/update-option --input -\`
+- \`wpklx ability run my-plugin/delete-post --post_id 123 --method DELETE\`
+
+Results print as JSON by default; use \`--format yaml|table\` to change that.
+
+### categories (GET) — List ability categories
+
+Path: \`/wp-abilities/v1/categories\`
+
+**Examples:**
+
+- \`wpklx ability categories\`
+- \`wpklx ability categories --quiet\` — one slug per line
+
+### category (GET) — Show a single category
+
+Path: \`/wp-abilities/v1/categories/{slug}\`
+
+**Examples:**
+
+- \`wpklx ability category data-retrieval\`
+
+## Notes
+
+- All Abilities API endpoints require authentication, and each ability applies
+  its own \`permission_callback\` on top of that.
+- Only abilities registered with \`show_in_rest\` are visible over REST.
+- If the site returns 404 for every ability command, it is likely running
+  WordPress < 6.9 without the Abilities API plugin. Check with \`wpklx routes\`.
+
+## Common Workflows
+
+Inspect before running: \`wpklx ability get my-plugin/x && wpklx ability run my-plugin/x\`
+Run every ability in a category:
+\`wpklx ability list --category data-retrieval --quiet | xargs -I{} wpklx ability run {}\`
+Use a different profile: \`wpklx @staging ability list\`
 `;
 
   console.log(renderMarkdown(help));

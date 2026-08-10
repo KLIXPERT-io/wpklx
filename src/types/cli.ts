@@ -25,6 +25,8 @@ export interface ParsedArgs {
   action: string;
   id?: string;
   namespacePrefix?: string;
+  /** Raw positional arguments, including resource at [0] and action at [1]. */
+  positional: string[];
   options: Record<string, string | boolean>;
   globalFlags: GlobalFlags;
   stdinFlag?: string;

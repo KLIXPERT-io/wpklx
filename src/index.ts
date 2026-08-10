@@ -9,7 +9,8 @@ import { handleError } from "./helpers/error.ts";
 import { resolveStdin } from "./helpers/stdin.ts";
 import { setNoColor } from "./cli/output.ts";
 import { runDiscover, runRoutes, runConfig, getSchema, executeCommand } from "./cli/commands.ts";
-import { showGlobalHelp, showResourceHelp } from "./cli/help.ts";
+import { showGlobalHelp, showResourceHelp, showAbilitiesHelp } from "./cli/help.ts";
+import { isAbilitiesResource, runAbilities } from "./cli/abilities.ts";
 import { runLogin } from "./cli/login.ts";
 import { runSerialize } from "./cli/serialize.ts";
 import { runMarkdown } from "./cli/markdown.ts";
@@ -113,6 +114,13 @@ async function main(): Promise<void> {
 
   // Handle resource-specific help
   if (parsed.action === "help" || (parsed.globalFlags.help && parsed.resource)) {
+    // The Abilities API surface is hand-rolled — its help needs no schema
+    if (isAbilitiesResource(parsed.resource)) {
+      showAbilitiesHelp();
+      scheduleBackgroundCheck(version, autoUpdateMode);
+      await safeExit(0);
+    }
+
     // Need config to discover schema for resource help
     try {
       const config = resolveConfig({
@@ -152,6 +160,20 @@ async function main(): Promise<void> {
       scheduleBackgroundCheck(version, config.auto_update);
       await safeExit(0);
     }
+  }
+
+  // Abilities API commands (WordPress 6.9+) — not part of the CRUD command map
+  if (isAbilitiesResource(parsed.resource)) {
+    const config = resolveConfig({
+      cliFlags: parsed.globalFlags,
+      envConfig,
+      yamlProfile: profile,
+      profileName,
+    });
+
+    await runAbilities(config, parsed);
+    scheduleBackgroundCheck(version, config.auto_update);
+    await safeExit(0);
   }
 
   // Config commands don't need API credentials

@@ -270,5 +270,14 @@ export function parseArgs(args: string[]): ParsedArgs {
     delete options["id"];
   }
 
-  return { resource, action, id, namespacePrefix, options, globalFlags, stdinFlag };
+  return {
+    resource,
+    action,
+    id,
+    namespacePrefix,
+    positional,
+    options,
+    globalFlags,
+    stdinFlag,
+  };
 }

@@ -24,6 +24,39 @@ export interface DiscoveredSchema {
   discoveredAt: string;
 }
 
+/**
+ * Execution semantics declared by an ability (WordPress Abilities API).
+ * These decide which HTTP method the /run endpoint accepts.
+ */
+export interface AbilityAnnotations {
+  instructions?: string;
+  readonly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+}
+
+/** An ability exposed by the WordPress Abilities API (WordPress 6.9+) */
+export interface Ability {
+  name: string;
+  label?: string;
+  description?: string;
+  category?: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  meta?: {
+    annotations?: AbilityAnnotations;
+    [key: string]: unknown;
+  };
+}
+
+/** A category grouping abilities */
+export interface AbilityCategory {
+  slug: string;
+  label?: string;
+  description?: string;
+  meta?: Record<string, unknown>;
+}
+
 /** Typed API response wrapper */
 export interface ApiResponse<T = unknown> {
   status: number;

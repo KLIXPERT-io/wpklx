@@ -10,6 +10,20 @@ export interface StdinResult {
 /** Actions that don't accept stdin input */
 const READ_ONLY_ACTIONS = new Set(["list", "get", "delete"]);
 
+/** Resources routed to the Abilities API command surface */
+const ABILITY_RESOURCES = new Set(["ability", "abilities"]);
+
+/** The only Abilities API action that takes input — everything else is a read */
+const ABILITY_STDIN_ACTIONS = new Set(["run", "exec", "call"]);
+
+/** Returns true if the command can consume piped input. */
+function acceptsStdin(parsed: ParsedArgs): boolean {
+  if (ABILITY_RESOURCES.has(parsed.resource)) {
+    return ABILITY_STDIN_ACTIONS.has(parsed.action);
+  }
+  return !READ_ONLY_ACTIONS.has(parsed.action);
+}
+
 /** Default stdin parameter mapping by resource name */
 const STDIN_DEFAULT_MAP: Record<string, string> = {
   post: "content",
@@ -18,6 +32,8 @@ const STDIN_DEFAULT_MAP: Record<string, string> = {
   category: "description",
   tag: "description",
   media: "file",
+  ability: "input",
+  abilities: "input",
 };
 
 /** Reads all of stdin into a Buffer. */
@@ -36,11 +52,14 @@ export async function readStdin(): Promise<StdinResult> {
 export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
   if (parsed.stdinFlag) {
     // Reject stdin on read-only actions
-    if (READ_ONLY_ACTIONS.has(parsed.action)) {
+    if (!acceptsStdin(parsed)) {
+      const supported = ABILITY_RESOURCES.has(parsed.resource)
+        ? "ability run"
+        : "create, update";
       throw new CliError(
         `Stdin input is not supported for '${parsed.action}' action.\n\n` +
           `The '${parsed.action}' action is read-only and does not accept piped input.\n` +
-          `Stdin is supported for: create, update`,
+          `Stdin is supported for: ${supported}`,
         ExitCode.VALIDATION,
       );
     }
@@ -79,7 +98,7 @@ export async function resolveStdin(parsed: ParsedArgs): Promise<void> {
   if (process.stdin.isTTY) return;
 
   // Skip stdin for read-only actions and commands that don't use content
-  if (READ_ONLY_ACTIONS.has(parsed.action)) return;
+  if (!acceptsStdin(parsed)) return;
 
   // Skip stdin for built-in commands that never accept piped content
   const NO_STDIN_RESOURCES = new Set([

@@ -15,10 +15,13 @@ export const ExitCode = {
 
 export class CliError extends Error {
   readonly exitCode: number;
-  constructor(message: string, exitCode: number) {
+  /** WordPress REST error code (e.g. "rest_no_route"), when the error came from the API. */
+  readonly code?: string;
+  constructor(message: string, exitCode: number, code?: string) {
     super(message);
     this.name = "CliError";
     this.exitCode = exitCode;
+    this.code = code;
   }
 }
 
@@ -40,6 +43,7 @@ export function formatApiError(
           `  2. Regenerate an application password: WP Admin → Users → Profile → Application Passwords\n` +
           `  3. Update your profile: wpklx config rm <name> && wpklx login`,
         ExitCode.AUTH,
+        body.code,
       );
 
     case 404:
@@ -51,6 +55,7 @@ export function formatApiError(
           `  2. Verify the item ID exists on the site\n` +
           `  3. Check that your user has permission to access this resource`,
         ExitCode.NOT_FOUND,
+        body.code,
       );
 
     case 400:
@@ -73,13 +78,14 @@ export function formatApiError(
       msg += `\n\nTo fix:\n` +
         `  1. Check required fields: wpklx <resource> help\n` +
         `  2. Verify field values match the expected types and allowed values`;
-      return new CliError(msg, ExitCode.VALIDATION);
+      return new CliError(msg, ExitCode.VALIDATION, body.code);
     }
 
     default:
       return new CliError(
         `API error (${status}): ${apiMessage}`,
         ExitCode.GENERAL,
+        body.code,
       );
   }
 }

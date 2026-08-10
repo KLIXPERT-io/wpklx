@@ -1,6 +1,6 @@
 ---
 name: wordpress-remote-cli
-description: Manage WordPress sites via the wpklx CLI — create/update/delete posts, pages, media, users, comments, categories, tags, and any plugin-provided resource. Use when the user needs to interact with a WordPress site, manage content, upload media, convert Markdown/HTML to block format, or automate WordPress workflows from the command line.
+description: Manage WordPress sites via the wpklx CLI — create/update/delete posts, pages, media, users, comments, categories, tags, and any plugin-provided resource. Use when the user needs to interact with a WordPress site, manage content, upload media, convert Markdown/HTML to block format, discover or execute WordPress 6.9 Abilities API abilities, or automate WordPress workflows from the command line.
 allowed-tools: Bash(wpklx:*)
 ---
 
@@ -58,6 +58,8 @@ wpklx <resource> help           # Resource-specific help with parameters
 wpklx version                   # Print version
 wpklx serialize                 # Convert HTML to WordPress block HTML (standalone)
 wpklx markdown                  # Convert Markdown to WordPress block HTML (standalone)
+wpklx ability list              # List Abilities API capabilities (WordPress 6.9+)
+wpklx ability help              # Abilities API reference
 ```
 
 ### Profile management
@@ -139,6 +141,65 @@ wpklx myplugin:settings get        # Custom plugin settings
 ```
 
 Without a prefix, `wp/v2` core routes are prioritized.
+
+## Abilities API (WordPress 6.9+)
+
+Sites on WordPress 6.9 (or with the Abilities API plugin) expose registered
+"abilities" under `wp-abilities/v1` — machine-readable capabilities with JSON
+Schema for their input and output. These routes are not CRUD, so wpklx exposes
+them through a dedicated `ability` command rather than the discovered schema.
+
+```bash
+wpklx ability list                          # All abilities: name, label, category, annotations
+wpklx ability list --category data-retrieval
+wpklx ability list --quiet                  # One ability name per line
+wpklx ability get my-plugin/get-site-info   # Full definition incl. input/output schema
+wpklx ability categories                    # List categories
+wpklx ability category data-retrieval       # Single category
+wpklx ability run my-plugin/get-site-info   # Execute
+```
+
+### Running abilities
+
+The `/run` endpoint's HTTP method depends on the ability's annotations. wpklx
+fetches the definition and picks it automatically:
+
+| Annotation          | Method   | Input transport                      |
+| ------------------- | -------- | ------------------------------------ |
+| `readonly: true`    | `GET`    | URL-encoded JSON `input` query param |
+| `destructive: true` | `DELETE` | URL-encoded JSON `input` query param |
+| otherwise           | `POST`   | `{"input": ...}` JSON body           |
+
+Add `--method GET|POST|DELETE` to force one and skip the lookup.
+
+Input can be raw JSON or individual flags:
+
+```bash
+wpklx ability run my-plugin/get-user --input '{"user_id":1}'
+wpklx ability run my-plugin/get-user --user_id 1
+wpklx ability run my-plugin/update-option --option_name blogname --option_value "New Title"
+cat input.json | wpklx ability run my-plugin/update-option --input -
+```
+
+Flag names are passed through verbatim — use the exact keys from the ability's
+`input_schema` (`--user_id`, not `--user-id`). Values are coerced: `true`/`false`/
+`null`, numbers and JSON objects/arrays are parsed; anything else stays a string.
+
+### Notes
+
+- Results print as **JSON by default** (an ability's output follows an arbitrary
+  `output_schema`). `wpklx ability get` defaults to YAML. Override with `--format`.
+- Every endpoint requires authentication, and each ability applies its own
+  `permission_callback` on top.
+- Only abilities registered with `show_in_rest` appear over REST.
+- Inspect before you run — an ability may be annotated `destructive: true`.
+- If every ability command 404s, the site likely predates WordPress 6.9; wpklx
+  says so explicitly. Confirm with `wpklx routes`.
+
+```bash
+# Run every ability in a category
+wpklx ability list --category data-retrieval --quiet | xargs -I{} wpklx ability run {}
+```
 
 ## Stdin piping
 

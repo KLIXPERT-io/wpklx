@@ -12,6 +12,7 @@ Whether you manage a single blog or dozens of client sites, KLX gives you a fast
 - **Multi-site profiles** — manage unlimited WordPress sites via YAML profiles and switch with `@name` syntax
 - **Full CRUD** — list, get, create, update, and delete any resource with intuitive action shortcuts (`ls`, `show`, `new`, `edit`, `rm`)
 - **Plugin-aware** — automatically picks up routes registered by WooCommerce, WPML, ACF, Yoast, Gravity Forms, and any other plugin
+- **Abilities API** — discover and execute WordPress 6.9 abilities with `wpklx ability list` / `wpklx ability run`, with the HTTP method inferred from each ability's annotations
 - **Namespace prefixes** — disambiguate overlapping resource names with `wpml:post`, `woocommerce:product`, etc.
 - **Stdin piping** — pipe content from files, other commands, or markdown into create/update actions
 - **Flexible output** — table, JSON, or YAML output with field filtering (`--fields=id,title,status`) and quiet mode (`--quiet`)
@@ -265,6 +266,8 @@ wpklx [@profile] <resource> <action> [--option value] [flags]
 | `wpklx discover`     | Fetch and cache the API schema           |
 | `wpklx routes`       | List all discovered routes               |
 | `wpklx config ls`    | List all profiles                        |
+| `wpklx ability list` | List abilities exposed by the site (WP 6.9+) |
+| `wpklx ability run <ns>/<name>` | Execute an ability            |
 | `wpklx help`         | Show global help                         |
 | `wpklx <resource> help` | Show help for a specific resource     |
 | `wpklx version`      | Print version                            |
@@ -294,6 +297,50 @@ wpklx myplugin:settings get
 ```
 
 The prefix matches against the route's namespace (e.g., `wpml/v1`, `myplugin/v1`). Without a prefix, `wp/v2` core routes are prioritized.
+
+### Abilities API (WordPress 6.9+)
+
+WordPress 6.9 introduced the [Abilities API](https://developer.wordpress.org/apis/abilities-api/rest-api-endpoints/) — a registry of machine-readable, executable capabilities under the `wp-abilities/v1` namespace. Because its routes are `/{namespace}/{ability}[/run]` rather than CRUD collections, KLX gives it a dedicated command surface instead of deriving one from the schema.
+
+| Command                              | Endpoint                                        |
+| ------------------------------------ | ----------------------------------------------- |
+| `wpklx ability list`                 | `GET /wp-abilities/v1/abilities`                |
+| `wpklx ability get <ns>/<name>`      | `GET /wp-abilities/v1/{namespace}/{ability}`    |
+| `wpklx ability run <ns>/<name>`      | `GET\|POST\|DELETE .../{ability}/run`           |
+| `wpklx ability categories`           | `GET /wp-abilities/v1/categories`               |
+| `wpklx ability category <slug>`      | `GET /wp-abilities/v1/categories/{slug}`        |
+
+```bash
+# Discover what the site can do
+wpklx ability list
+wpklx ability list --category data-retrieval
+wpklx ability get my-plugin/get-site-info      # includes input/output JSON Schema
+
+# Execute — input as JSON, or as individual flags
+wpklx ability run my-plugin/get-site-info
+wpklx ability run my-plugin/get-user --input '{"user_id":1}'
+wpklx ability run my-plugin/update-option --option_name blogname --option_value "New Title"
+cat input.json | wpklx ability run my-plugin/update-option --input -
+
+# Run everything in a category
+wpklx ability list --category data-retrieval --quiet | xargs -I{} wpklx ability run {}
+```
+
+**Method selection.** The `/run` endpoint accepts a different HTTP method depending on the ability's annotations. KLX reads the ability definition and picks it automatically:
+
+| Annotation          | Method   | Input sent as                        |
+| ------------------- | -------- | ------------------------------------ |
+| `readonly: true`    | `GET`    | URL-encoded JSON `input` query param |
+| `destructive: true` | `DELETE` | URL-encoded JSON `input` query param |
+| otherwise           | `POST`   | `{"input": ...}` JSON body           |
+
+Pass `--method GET|POST|DELETE` to skip the lookup and force one. When the method is inferred, KLX retries the remaining methods if the site answers `rest_no_route` — the request never reached the ability, so nothing can run twice.
+
+**Input keys** are passed through verbatim, so use the exact names from the ability's `input_schema` (`--user_id`, not `--user-id`). Values are coerced: `true`/`false`/`null`, numbers, and JSON objects/arrays are parsed; everything else stays a string. Use `--input` when you need full control.
+
+Ability results print as JSON by default (they follow an arbitrary `output_schema`); `--format yaml|table` overrides that. All endpoints require authentication, and each ability additionally applies its own `permission_callback`. Only abilities registered with `show_in_rest` are visible.
+
+Run `wpklx ability help` for the full reference.
 
 ### Examples
 
@@ -411,11 +458,13 @@ wpklx/
 │   ├── cli/
 │   │   ├── parser.ts            # Argument parsing, @profile extraction, namespace prefix
 │   │   ├── commands.ts          # Command execution (discover, routes, config, resources)
+│   │   ├── abilities.ts         # Abilities API commands (list, get, run, categories)
 │   │   ├── formatters.ts        # Table column selection, field filtering
 │   │   ├── help.ts              # Help text generation
 │   │   ├── login.ts             # Interactive site setup wizard
 │   │   └── output.ts            # Output rendering (table, json, yaml, markdown)
 │   ├── api/
+│   │   ├── abilities.ts         # Abilities API client (wp-abilities/v1)
 │   │   ├── client.ts            # HTTP client with auth and error handling
 │   │   ├── discovery.ts         # Route discovery from /wp-json
 │   │   ├── schema.ts            # Schema parsing and route-to-command mapping

@@ -9,6 +9,7 @@ import {
   resolveNamespacePrefix,
 } from "../api/schema.ts";
 import type { CommandMap } from "../api/schema.ts";
+import { ABILITIES_NAMESPACE, hasAbilitiesApi } from "../api/abilities.ts";
 import type { DiscoveredSchema } from "../types/api.ts";
 import {
   loadYamlConfig,
@@ -49,7 +50,38 @@ export async function runDiscover(config: ResolvedConfig): Promise<void> {
     `Discovered ${schema.routes.length} routes across ${schema.namespaces.length} namespaces.`,
   );
   logger.info(`Resources: ${resources.join(", ")}`);
+
+  if (hasAbilitiesApi(schema)) {
+    logger.info(
+      `Abilities API detected (${ABILITIES_NAMESPACE}) — run 'wpklx ability list'.`,
+    );
+  }
 }
+
+/** Static command surface for the Abilities API, shown in `wpklx routes`. */
+const ABILITY_ROUTE_ROWS = [
+  { action: "list", method: "GET", path: `/${ABILITIES_NAMESPACE}/abilities` },
+  {
+    action: "get",
+    method: "GET",
+    path: `/${ABILITIES_NAMESPACE}/{namespace}/{ability}`,
+  },
+  {
+    action: "run",
+    method: "GET|POST|DELETE",
+    path: `/${ABILITIES_NAMESPACE}/{namespace}/{ability}/run`,
+  },
+  {
+    action: "categories",
+    method: "GET",
+    path: `/${ABILITIES_NAMESPACE}/categories`,
+  },
+  {
+    action: "category",
+    method: "GET",
+    path: `/${ABILITIES_NAMESPACE}/categories/{slug}`,
+  },
+];
 
 /** Run the routes command — show available routes. */
 export async function runRoutes(
@@ -84,6 +116,20 @@ export async function runRoutes(
     }
   }
 
+  // The Abilities API is excluded from the CRUD command map — add its
+  // hand-rolled surface so `wpklx routes` still shows everything callable.
+  if (hasAbilitiesApi(schema)) {
+    for (const row of ABILITY_ROUTE_ROWS) {
+      rows.push({
+        Resource: "ability",
+        Action: row.action,
+        Method: row.method,
+        Namespace: ABILITIES_NAMESPACE,
+        Path: row.path,
+      });
+    }
+  }
+
   // Sort by resource then action
   rows.sort(
     (a, b) =>
@@ -108,7 +154,9 @@ export async function getSchema(config: ResolvedConfig): Promise<CommandMap> {
 }
 
 /** Get the raw discovered schema (cached or fresh). */
-async function getRawSchema(config: ResolvedConfig): Promise<DiscoveredSchema> {
+export async function getRawSchema(
+  config: ResolvedConfig,
+): Promise<DiscoveredSchema> {
   return (
     loadCachedSchema(config.host, config.cache_ttl) ??
     (await discoverAndCache(config))

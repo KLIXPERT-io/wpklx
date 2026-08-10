@@ -1,5 +1,6 @@
 import type { DiscoveredSchema, RouteParam } from "../types/api.ts";
 import type { CommandParam } from "../types/cli.ts";
+import { ABILITIES_NAMESPACE } from "./abilities.ts";
 
 export interface CommandMeta {
   method: string;
@@ -32,6 +33,15 @@ export function mapRoutesToCommands(
   for (const route of sortedRoutes) {
     // Filter by namespace if specified
     if (namespaceFilter && !route.namespace.startsWith(namespaceFilter)) {
+      continue;
+    }
+    // The Abilities API doesn't fit the CRUD resource model — its routes are
+    // /{namespace}/{ability}[/run], which would map to junk resources like
+    // "v1" and "run". It gets a first-class surface instead: `wpklx ability`.
+    if (
+      route.namespace === ABILITIES_NAMESPACE &&
+      !namespaceFilter?.startsWith("wp-abilities")
+    ) {
       continue;
     }
     const resourceName = extractResourceName(route.path);

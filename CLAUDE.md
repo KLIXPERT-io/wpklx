@@ -26,6 +26,7 @@ The CLI follows `wpklx [@profile] <resource> <action> [options]` syntax. Resourc
 - **`src/cli/parser.ts`** — Parses arguments, resolves `@profile`, routes `<resource> <action>` to the API client
 - **`src/api/discovery.ts`** — Fetches and caches `/wp-json` schema, maps REST routes to CLI commands
 - **`src/api/schema.ts`** — Transforms WordPress route definitions into command metadata (accepted params, HTTP methods)
+- **`src/api/abilities.ts`** / **`src/cli/abilities.ts`** — Abilities API (`wp-abilities/v1`, WordPress 6.9+)
 - **`src/api/client.ts`** — HTTP client with Basic Auth (application passwords), retry logic, timeout handling
 - **`src/config/profiles.ts`** — Loads YAML profiles from `wpklx.config.yaml`, resolves `@name` references
 - **`src/config/env.ts`** — Loads `.env` files
@@ -34,6 +35,14 @@ The CLI follows `wpklx [@profile] <resource> <action> [options]` syntax. Resourc
 ### Action shortcuts
 
 `list`→`ls`, `get`→`show`, `create`→`new`, `update`→`edit`, `delete`→`rm`. These mappings are resolved in the parser before routing.
+
+### Abilities API
+
+`wp-abilities/v1` routes are `/{namespace}/{ability}[/run]` and don't fit the CRUD
+resource model, so `mapRoutesToCommands` skips that namespace and `wpklx ability`
+provides a hand-rolled surface (`list`, `get`, `run`, `categories`, `category`).
+The `/run` method comes from the ability's annotations: `readonly` → GET,
+`destructive` → DELETE, otherwise POST.
 
 ### Config resolution order
 
