@@ -300,13 +300,13 @@ The prefix matches against the route's namespace (e.g., `wpml/v1`, `myplugin/v1`
 
 ### Abilities API (WordPress 6.9+)
 
-WordPress 6.9 introduced the [Abilities API](https://developer.wordpress.org/apis/abilities-api/rest-api-endpoints/) — a registry of machine-readable, executable capabilities under the `wp-abilities/v1` namespace. Because its routes are `/{namespace}/{ability}[/run]` rather than CRUD collections, KLX gives it a dedicated command surface instead of deriving one from the schema.
+WordPress 6.9 introduced the [Abilities API](https://developer.wordpress.org/apis/abilities-api/rest-api-endpoints/) — a registry of machine-readable, executable capabilities under the `wp-abilities/v1` namespace. Because its routes are `/abilities/{name}[/run]` rather than CRUD collections, KLX gives it a dedicated command surface instead of deriving one from the schema. The per-ability path layout is read from the site's own route index, so 6.9 and 7.0 sites both work.
 
 | Command                              | Endpoint                                        |
 | ------------------------------------ | ----------------------------------------------- |
 | `wpklx ability list`                 | `GET /wp-abilities/v1/abilities`                |
-| `wpklx ability get <ns>/<name>`      | `GET /wp-abilities/v1/{namespace}/{ability}`    |
-| `wpklx ability run <ns>/<name>`      | `GET\|POST\|DELETE .../{ability}/run`           |
+| `wpklx ability get <ns>/<name>`      | `GET /wp-abilities/v1/abilities/{name}`         |
+| `wpklx ability run <ns>/<name>`      | `GET\|POST\|DELETE .../abilities/{name}/run`    |
 | `wpklx ability categories`           | `GET /wp-abilities/v1/categories`               |
 | `wpklx ability category <slug>`      | `GET /wp-abilities/v1/categories/{slug}`        |
 

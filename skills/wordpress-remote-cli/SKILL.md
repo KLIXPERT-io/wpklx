@@ -164,11 +164,11 @@ wpklx ability run my-plugin/get-site-info   # Execute
 The `/run` endpoint's HTTP method depends on the ability's annotations. wpklx
 fetches the definition and picks it automatically:
 
-| Annotation          | Method   | Input transport                      |
-| ------------------- | -------- | ------------------------------------ |
-| `readonly: true`    | `GET`    | URL-encoded JSON `input` query param |
-| `destructive: true` | `DELETE` | URL-encoded JSON `input` query param |
-| otherwise           | `POST`   | `{"input": ...}` JSON body           |
+| Annotation          | Method   | Input transport                       |
+| ------------------- | -------- | ------------------------------------- |
+| `readonly: true`    | `GET`    | `input[key]=value` query params       |
+| `destructive: true` | `DELETE` | `input[key]=value` query params       |
+| otherwise           | `POST`   | `{"input": ...}` JSON body            |
 
 Add `--method GET|POST|DELETE` to force one and skip the lookup.
 

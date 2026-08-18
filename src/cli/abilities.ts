@@ -4,13 +4,16 @@ import type { Ability, AbilityCategory } from "../types/api.ts";
 import { WpClient } from "../api/client.ts";
 import {
   ABILITIES_NAMESPACE,
+  abilityRoutes,
   describeAnnotations,
+  detectAbilityRouteShape,
   getAbility,
   getCategory,
   hasAbilitiesApi,
   listAbilities,
   listCategories,
   runAbility,
+  type AbilityRoutes,
   type RunMethod,
 } from "../api/abilities.ts";
 import { getRawSchema } from "./commands.ts";
@@ -93,12 +96,13 @@ async function dispatch(
   }
 
   const client = new WpClient(config);
+  const routes = await resolveRoutes(config);
   const format = parsed.globalFlags.format ?? config.output_format;
   const quiet = parsed.globalFlags.quiet === true;
 
   switch (action) {
     case "list": {
-      const abilities = await listAbilities(client, {
+      const abilities = await listAbilities(client, routes, {
         perPage: parsed.globalFlags.per_page ?? config.per_page,
         page: parsed.globalFlags.page,
         category: readStringOption(parsed, "category"),
@@ -120,7 +124,7 @@ async function dispatch(
 
     case "get": {
       const name = requireTarget(parsed, "get", "<namespace>/<ability>");
-      const ability = await getAbility(client, name);
+      const ability = await getAbility(client, routes, name);
 
       if (quiet) {
         console.log(ability.name);
@@ -139,7 +143,7 @@ async function dispatch(
       const name = requireTarget(parsed, "run", "<namespace>/<ability>");
       const input = buildInput(parsed);
       const method = readMethodOption(parsed);
-      const result = await runAbility(client, name, input, method);
+      const result = await runAbility(client, routes, name, input, method);
 
       if (quiet) {
         console.log(
@@ -161,7 +165,7 @@ async function dispatch(
     }
 
     case "categories": {
-      const categories = await listCategories(client, {
+      const categories = await listCategories(client, routes, {
         perPage: parsed.globalFlags.per_page ?? config.per_page,
         page: parsed.globalFlags.page,
       });
@@ -182,7 +186,7 @@ async function dispatch(
 
     case "category": {
       const slug = requireTarget(parsed, "category", "<slug>");
-      const category = await getCategory(client, slug);
+      const category = await getCategory(client, routes, slug);
 
       if (quiet) {
         console.log(category.slug);
@@ -199,6 +203,17 @@ async function dispatch(
     default:
       showAbilitiesHelp();
   }
+}
+
+/**
+ * Resolves the site's ability route layout from its (cached) route index.
+ *
+ * If the index can't be read we fall back to the layout WordPress core ships;
+ * the request itself will then surface whatever the real problem was.
+ */
+async function resolveRoutes(config: ResolvedConfig): Promise<AbilityRoutes> {
+  const schema = await getRawSchema(config).catch(() => null);
+  return abilityRoutes(detectAbilityRouteShape(schema));
 }
 
 function toAbilityRow(ability: Ability): Record<string, unknown> {

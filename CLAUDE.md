@@ -38,11 +38,19 @@ The CLI follows `wpklx [@profile] <resource> <action> [options]` syntax. Resourc
 
 ### Abilities API
 
-`wp-abilities/v1` routes are `/{namespace}/{ability}[/run]` and don't fit the CRUD
+`wp-abilities/v1` routes are `/abilities/{name}[/run]` and don't fit the CRUD
 resource model, so `mapRoutesToCommands` skips that namespace and `wpklx ability`
 provides a hand-rolled surface (`list`, `get`, `run`, `categories`, `category`).
 The `/run` method comes from the ability's annotations: `readonly` → GET,
 `destructive` → DELETE, otherwise POST.
+
+The ability name is one opaque identifier that may contain slashes — it is not
+limited to two segments. `detectAbilityRouteShape` reads the per-ability path
+layout off the site's route index (core's `/abilities/{name}` vs. the pre-core
+`/{namespace}/{ability}`) so both keep working; `abilityRoutes` then builds the
+paths. On GET/DELETE, `input` must be bracket-encoded (`input[key]=value`) —
+core validates it against the ability's schema before coercion, so a
+JSON-encoded string is rejected.
 
 ### Config resolution order
 

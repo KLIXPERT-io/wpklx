@@ -25,28 +25,112 @@ export function hasAbilitiesApi(schema: DiscoveredSchema): boolean {
   );
 }
 
-export interface AbilityRef {
-  namespace: string;
-  ability: string;
-}
+/**
+ * Path layouts WordPress has used for the per-ability routes.
+ *
+ * - `abilities` — what core registers: the whole name, slashes included, is a
+ *   single `{name}` segment under `/abilities`.
+ * - `legacy` — the pre-core layout, where namespace and ability were separate
+ *   path segments directly under the API namespace.
+ */
+export type AbilityRouteShape = "abilities" | "legacy";
+
+/** Mirrors core's `(?P<name>[a-zA-Z0-9\-\/]+)` route regex. */
+const ABILITY_NAME_PATTERN = /^[a-zA-Z0-9\-/]+$/;
 
 /**
- * Splits a fully qualified ability name ("my-plugin/get-site-info")
- * into its namespace and ability parts.
+ * Normalises a fully qualified ability name ("my-plugin/get-site-info").
+ *
+ * The name is one opaque identifier that may contain slashes — it is not
+ * limited to two segments — so this only strips stray slashes and rejects
+ * characters core's route regex would not match.
  */
-export function parseAbilityName(name: string): AbilityRef {
-  const parts = name.split("/");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+export function normalizeAbilityName(name: string): string {
+  let value = name.trim().replace(/^\/+|\/+$/g, "");
+
+  // Accept the REST path form that the site's own `_links` expose, but only
+  // when something with a slash remains — an ability really named
+  // "abilities/foo" is legal.
+  const prefix = "abilities/";
+  if (value.startsWith(prefix) && value.slice(prefix.length).includes("/")) {
+    value = value.slice(prefix.length);
+  }
+
+  if (!value || value.includes("//") || !ABILITY_NAME_PATTERN.test(value)) {
     throw new CliError(
       `Invalid ability name: '${name}'.\n\n` +
         `Abilities are named <namespace>/<ability>, for example:\n` +
         `  wpklx ability get my-plugin/get-site-info\n` +
         `  wpklx ability run my-plugin/get-site-info\n\n` +
+        `Names may only contain letters, digits, '-' and '/'.\n` +
         `Run 'wpklx ability list' to see the abilities this site exposes.`,
       ExitCode.VALIDATION,
     );
   }
-  return { namespace: parts[0], ability: parts[1] };
+  return value;
+}
+
+/**
+ * Reads the per-ability route layout off the site's own route index.
+ *
+ * WordPress 6.9 and 7.0 disagree on where a single ability lives, so prefer
+ * what the site advertises over either hardcoded shape. Falls back to the core
+ * layout when the index is unavailable or says nothing useful.
+ */
+export function detectAbilityRouteShape(
+  schema: DiscoveredSchema | null | undefined,
+): AbilityRouteShape {
+  const paths = (schema?.routes ?? [])
+    .filter((route) => route.namespace === ABILITIES_NAMESPACE)
+    .map((route) => route.path);
+
+  if (paths.some((path) => path.startsWith(`${BASE}/abilities/`))) {
+    return "abilities";
+  }
+  if (paths.some((path) => path.includes("(?P<namespace>"))) {
+    logger.debug(
+      "Site exposes the pre-core Abilities API route layout — using /{namespace}/{ability}",
+    );
+    return "legacy";
+  }
+  return "abilities";
+}
+
+/** The paths wpklx calls for one site, resolved for its route layout. */
+export interface AbilityRoutes {
+  shape: AbilityRouteShape;
+  abilities: string;
+  categories: string;
+  ability(name: string): string;
+  run(name: string): string;
+  category(slug: string): string;
+  /** The same paths with placeholders, for help output and `wpklx routes`. */
+  templates: { ability: string; run: string; category: string };
+}
+
+export function abilityRoutes(
+  shape: AbilityRouteShape = "abilities",
+): AbilityRoutes {
+  // Only the per-ability routes moved; the collections stayed put.
+  const prefix = shape === "abilities" ? `${BASE}/abilities` : BASE;
+  const placeholder =
+    shape === "abilities" ? "{name}" : "{namespace}/{ability}";
+  const encode = (name: string) =>
+    normalizeAbilityName(name).split("/").map(encodeURIComponent).join("/");
+
+  return {
+    shape,
+    abilities: `${BASE}/abilities`,
+    categories: `${BASE}/categories`,
+    ability: (name) => `${prefix}/${encode(name)}`,
+    run: (name) => `${prefix}/${encode(name)}/run`,
+    category: (slug) => `${BASE}/categories/${encodeURIComponent(slug)}`,
+    templates: {
+      ability: `${prefix}/${placeholder}`,
+      run: `${prefix}/${placeholder}/run`,
+      category: `${BASE}/categories/{slug}`,
+    },
+  };
 }
 
 /**
@@ -97,32 +181,34 @@ function collectionParams(opts: {
 /** GET /wp-abilities/v1/abilities */
 export async function listAbilities(
   client: WpClient,
+  routes: AbilityRoutes,
   opts: { perPage?: number; page?: number; category?: string } = {},
 ): Promise<Ability[]> {
   const response = await client.get<Ability[]>(
-    `${BASE}/abilities`,
+    routes.abilities,
     collectionParams(opts),
   );
   return response.data;
 }
 
-/** GET /wp-abilities/v1/{namespace}/{ability} */
+/** GET /wp-abilities/v1/abilities/{name} */
 export async function getAbility(
   client: WpClient,
+  routes: AbilityRoutes,
   name: string,
 ): Promise<Ability> {
-  const { namespace, ability } = parseAbilityName(name);
-  const response = await client.get<Ability>(`${BASE}/${namespace}/${ability}`);
+  const response = await client.get<Ability>(routes.ability(name));
   return response.data;
 }
 
 /** GET /wp-abilities/v1/categories */
 export async function listCategories(
   client: WpClient,
+  routes: AbilityRoutes,
   opts: { perPage?: number; page?: number } = {},
 ): Promise<AbilityCategory[]> {
   const response = await client.get<AbilityCategory[]>(
-    `${BASE}/categories`,
+    routes.categories,
     collectionParams(opts),
   );
   return response.data;
@@ -131,11 +217,10 @@ export async function listCategories(
 /** GET /wp-abilities/v1/categories/{slug} */
 export async function getCategory(
   client: WpClient,
+  routes: AbilityRoutes,
   slug: string,
 ): Promise<AbilityCategory> {
-  const response = await client.get<AbilityCategory>(
-    `${BASE}/categories/${encodeURIComponent(slug)}`,
-  );
+  const response = await client.get<AbilityCategory>(routes.category(slug));
   return response.data;
 }
 
@@ -146,10 +231,12 @@ export interface RunResult {
 }
 
 /**
- * Executes an ability via GET|POST|DELETE /wp-abilities/v1/{namespace}/{ability}/run.
+ * Executes an ability via GET|POST|DELETE /wp-abilities/v1/abilities/{name}/run.
  *
- * GET and DELETE pass the input as a URL-encoded JSON `input` query param;
- * POST sends `{ "input": ... }` as the JSON body.
+ * GET and DELETE pass the input as bracket-encoded query params
+ * (`input[key]=value`) — core validates `input` against the ability's schema
+ * before any coercion, so a JSON-encoded string is rejected as "not of type
+ * object". POST sends `{ "input": ... }` as the JSON body.
  *
  * When the method is not forced, the remaining methods are retried if the site
  * answers `rest_no_route` — the ability exists, so a 404 means only that its
@@ -158,18 +245,18 @@ export interface RunResult {
  */
 export async function runAbility(
   client: WpClient,
+  routes: AbilityRoutes,
   name: string,
   input: unknown,
   forcedMethod?: RunMethod,
 ): Promise<RunResult> {
-  const { namespace, ability } = parseAbilityName(name);
-  const path = `${BASE}/${namespace}/${ability}/run`;
+  const path = routes.run(name);
 
   let candidates: RunMethod[];
   if (forcedMethod) {
     candidates = [forcedMethod];
   } else {
-    const definition = await getAbility(client, name);
+    const definition = await getAbility(client, routes, name);
     const preferred = abilityRunMethod(definition);
     candidates = [
       preferred,
@@ -222,14 +309,50 @@ async function execute(
     return response.data;
   }
 
-  const params =
-    input === undefined
-      ? undefined
-      : { input: JSON.stringify(input) };
+  const params = input === undefined ? undefined : bracketParams("input", input);
 
   const response =
     method === "GET"
       ? await client.get(path, params)
       : await client.delete(path, params);
   return response.data;
+}
+
+/**
+ * Flattens a value into PHP-style bracketed query params, so that
+ * `{ limit: 2, filter: { status: "publish" } }` becomes
+ * `input[limit]=2&input[filter][status]=publish`.
+ *
+ * This is the only encoding core accepts for `input` on GET and DELETE: the
+ * `input` arg is typed as object/array/scalar and validated before sanitising,
+ * so a JSON string never passes.
+ */
+export function bracketParams(
+  key: string,
+  value: unknown,
+): Record<string, string> {
+  const params: Record<string, string> = {};
+
+  const walk = (prefix: string, current: unknown): void => {
+    if (current === undefined) return;
+    if (current === null) {
+      params[prefix] = "";
+      return;
+    }
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => walk(`${prefix}[${index}]`, item));
+      return;
+    }
+    if (typeof current === "object") {
+      for (const [k, v] of Object.entries(current as Record<string, unknown>)) {
+        walk(`${prefix}[${k}]`, v);
+      }
+      return;
+    }
+    // Booleans stringify to "true"/"false", which rest_sanitize_boolean accepts.
+    params[prefix] = String(current);
+  };
+
+  walk(key, value);
+  return params;
 }
