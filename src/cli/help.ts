@@ -265,7 +265,8 @@ machine-readable form — each has a name, a category, JSON Schema definitions f
 its input and output, and annotations describing how it behaves.
 
 Unlike other wpklx resources, \`ability\` is not derived from the REST schema:
-the Abilities API uses \`/{namespace}/{ability}\` routes that don't map to CRUD.
+its \`/abilities/{name}[/run]\` routes don't map to CRUD. The exact path layout
+is still read from the site's route index, so 6.9 and 7.0 sites both work.
 
 ## Available Actions
 
@@ -288,7 +289,7 @@ Path: \`/wp-abilities/v1/abilities\`
 
 ### get (GET) — Show a single ability, including its schemas
 
-Path: \`/wp-abilities/v1/{namespace}/{ability}\`
+Path: \`/wp-abilities/v1/abilities/{name}\`
 
 **Examples:**
 
@@ -299,12 +300,12 @@ Output defaults to YAML because an ability is mostly nested JSON Schema.
 
 ### run (GET|POST|DELETE) — Execute an ability
 
-Path: \`/wp-abilities/v1/{namespace}/{ability}/run\`
+Path: \`/wp-abilities/v1/abilities/{name}/run\`
 
 The HTTP method is chosen from the ability's annotations:
 
-- \`readonly: true\` → **GET** (input sent as a URL-encoded \`input\` query param)
-- \`destructive: true\` → **DELETE** (input sent as a query param)
+- \`readonly: true\` → **GET** (input sent as \`input[key]=value\` query params)
+- \`destructive: true\` → **DELETE** (input sent as query params)
 - otherwise → **POST** (input sent as \`{"input": ...}\` in the JSON body)
 
 wpklx fetches the ability definition first to decide. Pass \`--method\` to skip

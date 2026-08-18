@@ -9,7 +9,12 @@ import {
   resolveNamespacePrefix,
 } from "../api/schema.ts";
 import type { CommandMap } from "../api/schema.ts";
-import { ABILITIES_NAMESPACE, hasAbilitiesApi } from "../api/abilities.ts";
+import {
+  ABILITIES_NAMESPACE,
+  abilityRoutes,
+  detectAbilityRouteShape,
+  hasAbilitiesApi,
+} from "../api/abilities.ts";
 import type { DiscoveredSchema } from "../types/api.ts";
 import {
   loadYamlConfig,
@@ -58,30 +63,22 @@ export async function runDiscover(config: ResolvedConfig): Promise<void> {
   }
 }
 
-/** Static command surface for the Abilities API, shown in `wpklx routes`. */
-const ABILITY_ROUTE_ROWS = [
-  { action: "list", method: "GET", path: `/${ABILITIES_NAMESPACE}/abilities` },
-  {
-    action: "get",
-    method: "GET",
-    path: `/${ABILITIES_NAMESPACE}/{namespace}/{ability}`,
-  },
-  {
-    action: "run",
-    method: "GET|POST|DELETE",
-    path: `/${ABILITIES_NAMESPACE}/{namespace}/{ability}/run`,
-  },
-  {
-    action: "categories",
-    method: "GET",
-    path: `/${ABILITIES_NAMESPACE}/categories`,
-  },
-  {
-    action: "category",
-    method: "GET",
-    path: `/${ABILITIES_NAMESPACE}/categories/{slug}`,
-  },
-];
+/**
+ * Command surface for the Abilities API, shown in `wpklx routes`.
+ *
+ * The per-ability paths depend on the layout the site registers, so build them
+ * from the same resolver the `ability` commands use rather than hardcoding one.
+ */
+function abilityRouteRows(schema: DiscoveredSchema) {
+  const routes = abilityRoutes(detectAbilityRouteShape(schema));
+  return [
+    { action: "list", method: "GET", path: routes.abilities },
+    { action: "get", method: "GET", path: routes.templates.ability },
+    { action: "run", method: "GET|POST|DELETE", path: routes.templates.run },
+    { action: "categories", method: "GET", path: routes.categories },
+    { action: "category", method: "GET", path: routes.templates.category },
+  ];
+}
 
 /** Run the routes command — show available routes. */
 export async function runRoutes(
@@ -119,7 +116,7 @@ export async function runRoutes(
   // The Abilities API is excluded from the CRUD command map — add its
   // hand-rolled surface so `wpklx routes` still shows everything callable.
   if (hasAbilitiesApi(schema)) {
-    for (const row of ABILITY_ROUTE_ROWS) {
+    for (const row of abilityRouteRows(schema)) {
       rows.push({
         Resource: "ability",
         Action: row.action,
